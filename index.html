@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TRACE-PORT Digital - Bilan des arrêts</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">TP</span>
+          <div>
+            <strong>TRACE-PORT</strong>
+            <span>Poste de Commande</span>
+          </div>
+        </div>
+        <nav class="nav" aria-label="Navigation principale">
+          <button class="nav-item active" data-view="dashboard" type="button">Tableau de bord</button>
+          <button class="nav-item" data-view="events" type="button">Arrêts</button>
+          <button class="nav-item" data-view="entry" type="button">Saisie</button>
+          <button class="nav-item" data-view="tonnage" type="button">Tonnage</button>
+          <button class="nav-item" data-view="flow" type="button">Trains & navires</button>
+          <button class="nav-item" data-view="formulas" type="button">Formules & requêtes</button>
+          <button class="nav-item" data-view="dmaic" type="button">Besoins PFE</button>
+        </nav>
+        <div class="sidebar-meta">
+          <span id="source-month">Janvier 2026</span>
+          <span id="data-count">Base Excel importée</span>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Direction des Embarquements - Port de Casablanca</p>
+            <h1 id="view-title">Tableau de bord</h1>
+          </div>
+          <div class="actions">
+            <button class="ghost-button" id="export-csv" type="button">Exporter CSV</button>
+            <button class="primary-button" id="export-json" type="button">Exporter synthèse</button>
+          </div>
+        </header>
+
+        <section class="filters" aria-label="Filtres">
+          <label>
+            S/E
+            <select id="filter-section"></select>
+          </label>
+          <label>
+            Famille
+            <select id="filter-family"></select>
+          </label>
+          <label>
+            Qualité
+            <select id="filter-quality"></select>
+          </label>
+          <label class="search-box">
+            Recherche
+            <input id="filter-search" type="search" placeholder="Navire, description, équipement">
+          </label>
+        </section>
+
+        <section id="view" class="view" aria-live="polite"></section>
+      </main>
+    </div>
+
+    <script src="app-data.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
