@@ -10,22 +10,27 @@
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <span class="brand-mark">TP</span>
+          <span class="brand-mark">OCP</span>
           <div>
             <strong>TRACE-PORT</strong>
-            <span>Poste de Commande</span>
+            <span>Traçabilité des arrêts</span>
           </div>
         </div>
         <nav class="nav" aria-label="Navigation principale">
-          <button class="nav-item active" data-view="dashboard" type="button">Tableau de bord</button>
-          <button class="nav-item" data-view="daily" type="button">Synthèse jour</button>
-          <button class="nav-item" data-view="monthly" type="button">Synthèse mois</button>
-          <button class="nav-item" data-view="events" type="button">Arrêts</button>
-          <button class="nav-item" data-view="entry" type="button">Saisie</button>
-          <button class="nav-item" data-view="tonnage" type="button">Tonnage</button>
-          <button class="nav-item" data-view="flow" type="button">Trains & navires</button>
-          <button class="nav-item" data-view="formulas" type="button">Formules & requêtes</button>
-          <button class="nav-item" data-view="dmaic" type="button">Besoins PFE</button>
+          <span class="nav-section-title">Pilotage</span>
+          <button class="nav-item active" data-view="dashboard" type="button"><span>⌁</span>Tableau de bord</button>
+          <button class="nav-item" data-view="daily" type="button"><span>◴</span>Synthèse jour</button>
+          <button class="nav-item" data-view="monthly" type="button"><span>▦</span>Synthèse mois</button>
+
+          <span class="nav-section-title">Gestion des arrêts</span>
+          <button class="nav-item" data-view="entry" type="button"><span>＋</span>Nouvel arrêt</button>
+          <button class="nav-item" data-view="events" type="button"><span>☷</span>Journal des arrêts</button>
+          <button class="nav-item" data-view="flow" type="button"><span>⇄</span>Trains & navires</button>
+          <button class="nav-item" data-view="tonnage" type="button"><span>▥</span>Tonnage</button>
+
+          <span class="nav-section-title">Analyse & rapports</span>
+          <button class="nav-item" data-view="formulas" type="button"><span>ƒ</span>Formules & requêtes</button>
+          <button class="nav-item" data-view="dmaic" type="button"><span>◎</span>Besoins PFE</button>
         </nav>
         <div class="sidebar-meta">
           <span id="source-month">Janvier 2026</span>
@@ -36,32 +41,31 @@
       <main class="workspace">
         <header class="topbar">
           <div>
-            <p class="eyebrow">Direction des Embarquements - Port de Casablanca</p>
+            <p class="eyebrow">Système de traçabilité des arrêts de manutention</p>
             <h1 id="view-title">Tableau de bord</h1>
+            <span class="site-label">Direction Logistique Portuaire - OCP Casablanca</span>
           </div>
+          <div class="topbar-right">
+            <button class="icon-button" type="button" title="Notifications">⌁<span class="notification-dot">5</span></button>
+            <div class="user-chip">
+              <span class="avatar">IH</span>
+              <div>
+                <strong>El Houdzi Israa</strong>
+                <span>Administrateur</span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <section class="filters toolbar" aria-label="Filtres">
+          <label>S/E<select id="filter-section"></select></label>
+          <label>Famille<select id="filter-family"></select></label>
+          <label>Qualité<select id="filter-quality"></select></label>
+          <label class="search-box">Recherche<input id="filter-search" type="search" placeholder="Navire, description, équipement"></label>
           <div class="actions">
             <button class="ghost-button" id="export-csv" type="button">Exporter CSV</button>
             <button class="primary-button" id="export-json" type="button">Exporter synthèse</button>
           </div>
-        </header>
-
-        <section class="filters" aria-label="Filtres">
-          <label>
-            S/E
-            <select id="filter-section"></select>
-          </label>
-          <label>
-            Famille
-            <select id="filter-family"></select>
-          </label>
-          <label>
-            Qualité
-            <select id="filter-quality"></select>
-          </label>
-          <label class="search-box">
-            Recherche
-            <input id="filter-search" type="search" placeholder="Navire, description, équipement">
-          </label>
         </section>
 
         <section id="view" class="view" aria-live="polite"></section>

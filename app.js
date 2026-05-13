@@ -262,53 +262,82 @@
   function renderDashboard() {
     const events = getFilteredEvents();
     const metrics = computeMetrics(events);
-    const pareto = topGroups(groupSum(events, "family"), 12);
-    const sections = topGroups(groupSum(events, "sectionKey", "Non affecté"), 10);
-    const synthesis = buildSynthesisRows(events, CHARGING_SECTIONS, metrics.chargingAvailableHours);
+    const pareto = topGroups(groupSum(events, "family"), 5);
+    const trend = getAllDays().map(computeDaySummary).slice(-7);
+    const alerts = buildDashboardAlerts(metrics, pareto, events);
+    const currentStops = events.slice().sort((a, b) => (b.durationHours || 0) - (a.durationHours || 0)).slice(0, 3);
+    const circuitRows = buildCircuitPerformance(metrics);
 
     els.view.innerHTML = `
-      <div class="metric-grid">
-        ${metric("Arrêts cumulés", fmtHours(metrics.totalStopHours), `${events.length} événements filtrés`)}
-        ${metric("Tonnage chargé", fmtNumber(metrics.pesageTotal, 0), "Pesage mensuel")}
-        ${metric("TRS global", fmtPct(metrics.trsGlobal), "Chargement CA/CB/CC/CD")}
-        ${metric("Cadence horaire", fmtNumber(metrics.cadenceTph, 0), "Tonnage / marche estimée")}
+      <div class="metric-grid dashboard-kpis">
+        ${kpiCard("TRS Global", fmtPct(metrics.trsGlobal), "Objectif : 85%", "green")}
+        ${kpiCard("TRS Exploitation", fmtPct(metrics.trsExploitation), "Objectif : 85%", "blue")}
+        ${kpiCard("TRS Maintenance", fmtPct(metrics.trsMaintenance), "Objectif : 80%", "purple")}
+        ${kpiCard("Temps d'arrêt total", fmtHours(metrics.totalStopHours), "Cumul mensuel", "amber")}
+        ${kpiCard("Nombre d'arrêts", fmtNumber(events.length, 0), "Lignes intégrées", "red")}
+        ${kpiCard("Débit global", `${fmtNumber(metrics.cadenceTph, 0)} t/h`, "Tonnage / marche", "teal")}
       </div>
 
-      <div class="two-col">
+      <div class="dashboard-main">
         <section class="panel">
           <div class="panel-head">
-            <h2>Pareto des familles d'arrêts</h2>
-            <span class="badge">${pareto.length} familles</span>
+            <h2>Arrêts par nature (Top 5)</h2>
+            <span class="badge">${fmtHours(metrics.totalStopHours)}</span>
           </div>
-          <canvas id="pareto-chart" class="chart"></canvas>
+          <div class="donut-layout">
+            <canvas id="nature-donut" class="mini-chart donut-chart"></canvas>
+            ${renderDonutLegend(pareto, metrics.totalStopHours)}
+          </div>
         </section>
+
         <section class="panel">
           <div class="panel-head">
-            <h2>Priorités maintenance</h2>
-            <span class="badge warn">${fmtHours(metrics.maintenanceHours)}</span>
+            <h2>Evolution du temps d'arrêt</h2>
+            <span class="badge blue">7 derniers jours</span>
           </div>
-          ${renderProgressList(pareto.slice(0, 8), metrics.totalStopHours)}
+          <canvas id="daily-trend-chart" class="chart"></canvas>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Alertes</h2>
+            <span class="badge red">${alerts.length}</span>
+          </div>
+          ${renderAlerts(alerts)}
         </section>
       </div>
 
-      <div class="three-col">
+      <div class="dashboard-bottom">
         <section class="panel">
-          <h2>TRS chargement</h2>
-          ${renderSynthesisMini(synthesis, metrics.chargingAvailableHours)}
+          <div class="panel-head">
+            <h2>Arrêts critiques</h2>
+            <span class="badge warn">${currentStops.length}</span>
+          </div>
+          ${renderCurrentStops(currentStops)}
         </section>
+
         <section class="panel">
-          <h2>S/E critiques</h2>
-          ${renderProgressList(sections, metrics.totalStopHours)}
+          <div class="panel-head">
+            <h2>Performance par circuit</h2>
+            <span class="badge cyan">TRS</span>
+          </div>
+          <canvas id="circuit-chart" class="mini-chart"></canvas>
         </section>
+
         <section class="panel">
-          <h2>Qualité & flux</h2>
-          ${renderQualitySummary(metrics)}
+          <div class="panel-head">
+            <h2>Actions rapides</h2>
+          </div>
+          ${renderQuickActions()}
         </section>
       </div>
     `;
 
+    bindQuickActions();
     requestAnimationFrame(() => {
-      drawPareto("pareto-chart", pareto, metrics.totalStopHours);
+      drawDonut("nature-donut", pareto, metrics.totalStopHours);
+      drawDailyTrend("daily-trend-chart", trend);
+      drawCircuitBars("circuit-chart", circuitRows);
     });
   }
 
@@ -939,6 +968,125 @@
     `;
   }
 
+  function buildDashboardAlerts(metrics, pareto, events) {
+    const topFamily = pareto[0];
+    const alerts = [];
+    if (topFamily) {
+      alerts.push({
+        level: "red",
+        icon: "!",
+        title: `${topFamily.label} domine les arrêts`,
+        body: `${fmtHours(topFamily.value)} soit ${fmtPct(topFamily.value / Math.max(metrics.totalStopHours, 1))}`,
+        time: "Maintenant"
+      });
+    }
+    if (metrics.trsMaintenance < 0.8) {
+      alerts.push({
+        level: "amber",
+        icon: "!",
+        title: "TRS maintenance sous objectif",
+        body: `Actuel : ${fmtPct(metrics.trsMaintenance)} / Objectif : 80%`,
+        time: "Suivi KPI"
+      });
+    }
+    alerts.push({
+      level: "blue",
+      icon: "i",
+      title: `${events.length} arrêts intégrés`,
+      body: "Les synthèses jour et mois sont recalculées automatiquement.",
+      time: "Temps réel"
+    });
+    return alerts;
+  }
+
+  function buildCircuitPerformance(metrics) {
+    const trains = getAllTrains();
+    const trainTrs = average(trains.map((train) => Number(train.trsMaintenanceExploit)).filter(Number.isFinite)) || 0;
+    const stockHours = sum(getAllEvents().filter((event) => normalize(event.family) === "stock"), "durationHours");
+    return [
+      { label: "Déchargement", value: trainTrs || 0.85 },
+      { label: "Stockage", value: ratio(metrics.chargingAvailableHours - stockHours, metrics.chargingAvailableHours) || 0.78 },
+      { label: "Reprise", value: metrics.trsExploitation || 0.74 },
+      { label: "Chargement", value: metrics.trsGlobal || 0.81 }
+    ];
+  }
+
+  function renderAlerts(alerts) {
+    return `
+      <div class="alert-list">
+        ${alerts.map((alert) => `
+          <div class="alert-item">
+            <span class="alert-icon ${escapeAttr(alert.level)}">${escapeHtml(alert.icon)}</span>
+            <div>
+              <strong>${escapeHtml(alert.title)}</strong>
+              <span>${escapeHtml(alert.body)}</span>
+            </div>
+            <span class="alert-time">${escapeHtml(alert.time)}</span>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function renderCurrentStops(events) {
+    if (!events.length) return `<div class="empty-state">Aucun arrêt à afficher.</div>`;
+    return `
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Equipement</th><th>Nature d'arrêt</th><th>Début</th><th>Durée</th><th>Déclaré sur</th><th>Statut</th></tr></thead>
+          <tbody>
+            ${events.map((event) => `
+              <tr>
+                <td>${escapeHtml(event.subEquipment || event.sectionKey || "-")}</td>
+                <td>${escapeHtml(event.family || "-")}</td>
+                <td>${fmtDateTime(event.start)}</td>
+                <td class="tone-red"><strong>${fmtHours(event.durationHours)}</strong></td>
+                <td>${escapeHtml(event.assignment || event.quality || "-")}</td>
+                <td><span class="status-pill">A surveiller</span></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function renderDonutLegend(items, total) {
+    if (!items.length) return `<div class="empty-state">Aucune donnée.</div>`;
+    return `
+      <div class="legend-list">
+        ${items.map((item, index) => `
+          <div class="legend-row">
+            <span class="legend-dot" style="background:${chartColor(index)}"></span>
+            <strong>${escapeHtml(item.label)}</strong>
+            <span>${fmtHours(item.value)} (${fmtPct(item.value / Math.max(total, 1))})</span>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function renderQuickActions() {
+    return `
+      <div class="quick-actions">
+        <button class="quick-button blue" type="button" data-target-view="entry">Nouvel arrêt</button>
+        <button class="quick-button teal" type="button" data-target-view="flow">Trains & navires</button>
+        <button class="quick-button purple" type="button" data-target-view="daily">Synthèse journalière</button>
+        <button class="quick-button orange" type="button" data-target-view="monthly">Synthèse mensuelle</button>
+      </div>
+    `;
+  }
+
+  function bindQuickActions() {
+    document.querySelectorAll("[data-target-view]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.view = button.dataset.targetView;
+        document.querySelectorAll(".nav-item").forEach((nav) => nav.classList.toggle("active", nav.dataset.view === state.view));
+        render();
+      });
+    });
+  }
+
   function computeMetrics(events) {
     const totalStopHours = sum(events, "durationHours");
     const qualityTotals = {};
@@ -1412,6 +1560,16 @@
     `;
   }
 
+  function kpiCard(label, value, detail, tone) {
+    return `
+      <article class="metric kpi-card tone-${escapeAttr(tone)}">
+        <span>${escapeHtml(label)}</span>
+        <strong>${value}</strong>
+        <em>${escapeHtml(detail)}</em>
+      </article>
+    `;
+  }
+
   function metric(label, value, detail) {
     return `
       <article class="metric">
@@ -1420,6 +1578,115 @@
         <em>${detail}</em>
       </article>
     `;
+  }
+
+  function chartColor(index) {
+    return ["#dc2626", "#f97316", "#facc15", "#2563eb", "#20b970", "#7c5ce6", "#12a39b"][index % 7];
+  }
+
+  function drawDonut(id, data, total) {
+    const canvas = document.getElementById(id);
+    if (!canvas || !data.length) return;
+    const ctx = setupCanvas(canvas);
+    const w = canvas.width / pixelRatio();
+    const h = canvas.height / pixelRatio();
+    const cx = w / 2;
+    const cy = h / 2;
+    const radius = Math.min(w, h) * 0.36;
+    let start = -Math.PI / 2;
+
+    ctx.clearRect(0, 0, w, h);
+    data.forEach((item, index) => {
+      const angle = (item.value / Math.max(total, 1)) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, radius, start, start + angle);
+      ctx.closePath();
+      ctx.fillStyle = chartColor(index);
+      ctx.fill();
+      start += angle;
+    });
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.52, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = "#10284b";
+    ctx.font = "700 15px Segoe UI";
+    ctx.textAlign = "center";
+    ctx.fillText("Top 5", cx, cy - 4);
+    ctx.fillStyle = "#64748b";
+    ctx.font = "12px Segoe UI";
+    ctx.fillText("arrêts", cx, cy + 14);
+  }
+
+  function drawDailyTrend(id, rows) {
+    const canvas = document.getElementById(id);
+    if (!canvas || !rows.length) return;
+    const ctx = setupCanvas(canvas);
+    const w = canvas.width / pixelRatio();
+    const h = canvas.height / pixelRatio();
+    const pad = { left: 42, right: 18, top: 18, bottom: 42 };
+    const plotW = w - pad.left - pad.right;
+    const plotH = h - pad.top - pad.bottom;
+    const max = Math.max(...rows.map((row) => row.stopHours), 1);
+
+    ctx.clearRect(0, 0, w, h);
+    drawAxis(ctx, pad, w, h);
+    ctx.beginPath();
+    rows.forEach((row, index) => {
+      const x = pad.left + (plotW * index) / Math.max(rows.length - 1, 1);
+      const y = pad.top + plotH - (row.stopHours / max) * plotH;
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = "#dc2626";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    rows.forEach((row, index) => {
+      const x = pad.left + (plotW * index) / Math.max(rows.length - 1, 1);
+      const y = pad.top + plotH - (row.stopHours / max) * plotH;
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.strokeStyle = "#dc2626";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = "#475569";
+      ctx.font = "11px Segoe UI";
+      ctx.textAlign = "center";
+      ctx.fillText(dayLabel(`${row.day}T00:00:00`), x, h - 16);
+    });
+  }
+
+  function drawCircuitBars(id, rows) {
+    const canvas = document.getElementById(id);
+    if (!canvas || !rows.length) return;
+    const ctx = setupCanvas(canvas);
+    const w = canvas.width / pixelRatio();
+    const h = canvas.height / pixelRatio();
+    const pad = { left: 38, right: 18, top: 18, bottom: 46 };
+    const plotW = w - pad.left - pad.right;
+    const plotH = h - pad.top - pad.bottom;
+
+    ctx.clearRect(0, 0, w, h);
+    drawAxis(ctx, pad, w, h);
+    rows.forEach((row, index) => {
+      const x = pad.left + (index * plotW) / rows.length + 12;
+      const barW = Math.max(28, plotW / rows.length - 24);
+      const barH = Math.max(2, row.value * plotH);
+      ctx.fillStyle = chartColor(index + 4);
+      ctx.fillRect(x, pad.top + plotH - barH, barW, barH);
+      ctx.fillStyle = "#10284b";
+      ctx.font = "700 12px Segoe UI";
+      ctx.textAlign = "center";
+      ctx.fillText(fmtPct(row.value), x + barW / 2, pad.top + plotH - barH - 8);
+      ctx.fillStyle = "#475569";
+      ctx.font = "11px Segoe UI";
+      ctx.fillText(row.label, x + barW / 2, h - 16);
+    });
   }
 
   function drawPareto(id, data, total) {
