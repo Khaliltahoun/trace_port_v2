@@ -5,8 +5,55 @@
   const EVENTS_KEY = "trace-port-digital-events-v1";
   const TRAINS_KEY = "trace-port-digital-trains-v1";
   const SHIPS_KEY = "trace-port-digital-ships-v1";
+  const VALIDATIONS_KEY = "trace-port-validations-v1";
+  const LOGS_KEY = "trace-port-logs-v1";
+  const CURRENT_USER = {
+    name: "El Houdzi Israa",
+    role: "Administrateur",
+    team: "Direction Logistique Portuaire"
+  };
+  const VIEW_TITLES = {
+    dashboard: "Tableau de bord",
+    entry: "Nouvel arrêt",
+    myStops: "Mes arrêts",
+    currentStops: "Arrêts en cours",
+    validation: "Validation",
+    kpiDashboard: "Tableaux de bord",
+    indicators: "Indicateurs (KPI)",
+    pareto: "Pareto des arrêts",
+    performance: "Performance circuits",
+    dailyReports: "Rapports journaliers",
+    monthlyReports: "Rapports mensuels",
+    exportData: "Export des données",
+    equipments: "Équipements",
+    stopNatures: "Natures d'arrêt",
+    users: "Utilisateurs",
+    settings: "Paramètres",
+    logs: "Traçabilité (logs)",
+    daily: "Synthèse journalière",
+    monthly: "Synthèse mensuelle",
+    events: "Bilan des arrêts",
+    tonnage: "Tonnage",
+    flow: "Trains & navires",
+    formulas: "Formules & requêtes",
+    dmaic: "Besoins PFE"
+  };
   const CHARGING_SECTIONS = ["CA30", "CB30", "CC30", "CD30"];
   const DISCHARGE_SECTIONS = ["DA10", "DB10"];
+  const USERS = [
+    { firstName: "Ahmed", lastName: "Benali", role: "Agent de quart", service: "Exploitation", status: "Actif" },
+    { firstName: "Youssef", lastName: "El Amrani", role: "Chef d'équipe", service: "Exploitation", status: "Actif" },
+    { firstName: "Khadija", lastName: "Saidi", role: "Superviseur", service: "Maintenance", status: "Actif" },
+    { firstName: "Omar", lastName: "Lahbabi", role: "Administrateur", service: "Système", status: "Actif" },
+    { firstName: "Israa", lastName: "El Houdzi", role: "Responsable", service: "DLP Casablanca", status: "Actif" }
+  ];
+  const ROLES = [
+    { name: "Agent", permissions: "Créer un arrêt, consulter ses arrêts" },
+    { name: "Chef d'équipe", permissions: "Valider, rejeter, corriger les arrêts" },
+    { name: "Superviseur", permissions: "Piloter KPI, rapports et alertes" },
+    { name: "Responsable", permissions: "Consulter tableaux de bord et rapports consolidés" },
+    { name: "Administrateur", permissions: "Gérer référentiels, utilisateurs et paramètres" }
+  ];
   const MAINTENANCE_FAMILIES = ["électrique", "instrumentation", "mécanique", "bande"];
   const EXTERNAL_FAMILIES = [
     "manque navire",
@@ -93,6 +140,7 @@
       search: ""
     },
     dailyDate: null,
+    selectedEventId: null,
     formulaSearch: "",
     formulaSheet: "all"
   };
@@ -210,6 +258,43 @@
     return [...DATA.ships, ...getLocalShips()];
   }
 
+  function getValidationOverrides() {
+    try {
+      return JSON.parse(localStorage.getItem(VALIDATIONS_KEY) || "{}");
+    } catch {
+      return {};
+    }
+  }
+
+  function saveValidationOverrides(overrides) {
+    localStorage.setItem(VALIDATIONS_KEY, JSON.stringify(overrides));
+  }
+
+  function getLocalLogs() {
+    try {
+      return JSON.parse(localStorage.getItem(LOGS_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  }
+
+  function saveLocalLogs(logs) {
+    localStorage.setItem(LOGS_KEY, JSON.stringify(logs));
+  }
+
+  function addLog(action, objectId, detail, user = CURRENT_USER.name) {
+    const logs = getLocalLogs();
+    logs.unshift({
+      id: `LOG-${Date.now()}`,
+      at: new Date().toISOString(),
+      user,
+      action,
+      objectId,
+      detail
+    });
+    saveLocalLogs(logs.slice(0, 300));
+  }
+
   function getFilteredEvents() {
     const query = state.filters.search;
     return getAllEvents().filter((event) => {
@@ -232,31 +317,37 @@
   }
 
   function render() {
-    const title = {
-      dashboard: "Tableau de bord",
-      daily: "Synthèse journalière",
-      monthly: "Synthèse mensuelle",
-      events: "Bilan des arrêts",
-      entry: "Saisie des arrêts",
-      tonnage: "Tonnage",
-      flow: "Trains & navires",
-      formulas: "Formules & requêtes",
-      dmaic: "Besoins PFE"
-    }[state.view];
+    const title = VIEW_TITLES[state.view] || "Tableau de bord";
     els.title.textContent = title;
 
     const renderers = {
       dashboard: renderDashboard,
+      entry: renderEntry,
+      myStops: renderMyStops,
+      currentStops: renderCurrentStopsView,
+      validation: renderValidation,
+      stopDetail: renderStopDetail,
+      kpiDashboard: renderKpiDashboard,
+      indicators: renderIndicators,
+      pareto: renderParetoAnalysis,
+      performance: renderPerformanceCircuits,
+      dailyReports: renderReports,
+      monthlyReports: renderReports,
+      exportData: renderExportData,
+      equipments: renderEquipments,
+      stopNatures: renderStopNatures,
+      users: renderUsers,
+      settings: renderSettings,
+      logs: renderLogs,
       daily: renderDailySynthesis,
       monthly: renderMonthlySynthesis,
       events: renderEvents,
-      entry: renderEntry,
       tonnage: renderTonnage,
       flow: renderFlow,
       formulas: renderFormulas,
       dmaic: renderDmaic
     };
-    renderers[state.view]();
+    (renderers[state.view] || renderDashboard)();
   }
 
   function renderDashboard() {
@@ -556,6 +647,575 @@
     requestAnimationFrame(() => {
       drawBars("events-family-chart", byFamily, { color: "#0f766e", suffix: "h" });
     });
+  }
+
+  function renderMyStops() {
+    const events = decorateEvents(getFilteredEvents());
+    const myEvents = events
+      .filter((event) => event.declaredBy === CURRENT_USER.name || String(event.id).startsWith("LOCAL-"))
+      .slice(0, 180);
+    const rows = myEvents.length ? myEvents : events.slice(0, 80);
+    const pending = rows.filter((event) => event.status === "pending").length;
+    const validated = rows.filter((event) => event.status === "validated").length;
+    const rejected = rows.filter((event) => event.status === "rejected").length;
+
+    els.view.innerHTML = `
+      <div class="metric-grid">
+        ${metric("Mes arrêts", fmtNumber(rows.length, 0), "Arrêts saisis ou affectés")}
+        ${metric("En attente", fmtNumber(pending, 0), "À valider")}
+        ${metric("Validés", fmtNumber(validated, 0), "Exploitables en synthèse")}
+        ${metric("Rejetés", fmtNumber(rejected, 0), "À corriger")}
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Mes arrêts</h2>
+            <p class="status-line">Table dynamique avec recherche globale, filtres de la barre supérieure, statut et accès au détail.</p>
+          </div>
+          <button class="primary-button" type="button" data-target-view="entry">Nouvel arrêt</button>
+        </div>
+        ${renderOperationalStopsTable(rows, { actions: true })}
+      </section>
+    `;
+
+    bindQuickActions();
+    bindStopActions();
+  }
+
+  function renderCurrentStopsView() {
+    const events = decorateEvents(getFilteredEvents())
+      .filter((event) => event.status === "pending" || Number(event.durationHours) >= 1)
+      .sort((a, b) => (b.durationHours || 0) - (a.durationHours || 0))
+      .slice(0, 120);
+    const critical = events.filter((event) => Number(event.durationHours) >= 2).length;
+    const totalHours = sum(events, "durationHours");
+
+    els.view.innerHTML = `
+      <div class="metric-grid">
+        ${metric("Arrêts en cours", fmtNumber(events.length, 0), "Arrêts ouverts ou critiques")}
+        ${metric("Critiques", fmtNumber(critical, 0), "Durée supérieure à 2 h")}
+        ${metric("Durée cumulée", fmtHours(totalHours), "Impact opérationnel")}
+        ${metric("Action requise", fmtNumber(events.filter((e) => e.status === "pending").length, 0), "À surveiller")}
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Suivi temps réel des arrêts</h2>
+            <p class="status-line">Vue opérationnelle pour le poste de commande : équipement, nature, durée, statut et action rapide.</p>
+          </div>
+          <span class="badge red">${fmtHours(totalHours)}</span>
+        </div>
+        ${renderOperationalStopsTable(events, { actions: true, validationActions: true })}
+      </section>
+    `;
+
+    bindStopActions();
+  }
+
+  function renderValidation() {
+    const events = decorateEvents(getFilteredEvents());
+    const pending = events.filter((event) => event.status === "pending").slice(0, 150);
+    const validated = events.filter((event) => event.status === "validated").length;
+    const rejected = events.filter((event) => event.status === "rejected").length;
+
+    els.view.innerHTML = `
+      <div class="metric-grid">
+        ${metric("En attente", fmtNumber(pending.length, 0), "À traiter")}
+        ${metric("Validés aujourd'hui", fmtNumber(Math.min(validated, 12), 0), "Workflow chef d'équipe")}
+        ${metric("Rejetés aujourd'hui", fmtNumber(Math.min(rejected, 5), 0), "Avec commentaire")}
+        ${metric("Taux validation", fmtPct(ratio(validated, events.length || 1)), "Sur la base filtrée")}
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Validation des arrêts</h2>
+            <p class="status-line">Valider, rejeter ou ouvrir le détail d'un arrêt. Chaque action alimente automatiquement les logs.</p>
+          </div>
+          <span class="badge warn">${pending.length} en attente</span>
+        </div>
+        ${renderOperationalStopsTable(pending, { actions: true, validationActions: true })}
+      </section>
+    `;
+
+    bindStopActions();
+  }
+
+  function renderStopDetail() {
+    const event = decorateEvent(findEventById(state.selectedEventId) || getFilteredEvents()[0]);
+    if (!event) {
+      els.view.innerHTML = `<section class="panel"><div class="empty-state">Aucun arrêt sélectionné.</div></section>`;
+      return;
+    }
+    const history = buildEventHistory(event);
+
+    els.view.innerHTML = `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Détail de l'arrêt - ${escapeHtml(event.id)}</h2>
+            <p class="status-line">${escapeHtml(event.subEquipment || event.sectionKey || "Equipement non renseigné")} - ${escapeHtml(event.family || "Nature non renseignée")}</p>
+          </div>
+          <div class="inline-actions">
+            <span class="status-pill ${statusTone(event.status)}">${statusLabel(event.status)}</span>
+            <button class="ghost-button" type="button" data-print-detail>Imprimer</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="detail-layout">
+        <section class="panel">
+          <h2>Informations arrêt</h2>
+          <div class="detail-grid">
+            ${detailItem("Equipement", event.subEquipment || event.sectionKey || "-")}
+            ${detailItem("Circuit", circuitForSection(event.sectionKey))}
+            ${detailItem("Nature d'arrêt", event.family || "-")}
+            ${detailItem("Début", fmtDateTime(event.start))}
+            ${detailItem("Fin", fmtDateTime(event.end))}
+            ${detailItem("Durée", fmtHours(event.durationHours))}
+            ${detailItem("Qualité", event.quality || "-")}
+            ${detailItem("Affectation", event.assignment || "-")}
+            ${detailItem("Déclaré par", event.declaredBy)}
+            ${detailItem("Statut", statusLabel(event.status))}
+          </div>
+          <h3>Commentaire</h3>
+          <p class="comment-box">${escapeHtml(event.description || "Aucun commentaire renseigné.")}</p>
+          <div class="inline-actions">
+            <button class="primary-button" type="button" data-validate-id="${escapeAttr(event.id)}">Valider</button>
+            <button class="danger-button" type="button" data-reject-id="${escapeAttr(event.id)}">Rejeter</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Historique</h2>
+            <span class="badge">${history.length}</span>
+          </div>
+          <div class="timeline">
+            ${history.map((item) => `
+              <div class="timeline-item">
+                <strong>${escapeHtml(item.action)}</strong>
+                <span>${fmtDateTime(item.at)} - ${escapeHtml(item.user)}</span>
+                <p>${escapeHtml(item.detail)}</p>
+              </div>
+            `).join("")}
+          </div>
+        </section>
+      </div>
+    `;
+
+    bindStopActions();
+    document.querySelector("[data-print-detail]")?.addEventListener("click", () => window.print());
+  }
+
+  function renderKpiDashboard() {
+    const events = getFilteredEvents();
+    const metrics = computeMetrics(events);
+    const dailyRows = getAllDays().map(computeDaySummary).slice(-12);
+
+    els.view.innerHTML = `
+      <div class="metric-grid dashboard-kpis">
+        ${kpiCard("TRS Global", fmtPct(metrics.trsGlobal), "Objectif : 85%", "green")}
+        ${kpiCard("TRS Exploitation", fmtPct(metrics.trsExploitation), "Objectif : 85%", "blue")}
+        ${kpiCard("TRS Maintenance", fmtPct(metrics.trsMaintenance), "Objectif : 80%", "purple")}
+        ${kpiCard("TRG Global", fmtPct(metrics.trgGlobal), "Disponibilité réelle", "teal")}
+        ${kpiCard("MTTR", fmtHours(computeMttr(events)), "Temps moyen réparation", "amber")}
+        ${kpiCard("MTBF", fmtHours(computeMtbf(events)), "Temps moyen entre arrêts", "green")}
+      </div>
+      <div class="two-col">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Jauge TRS global</h2>
+            <span class="badge">${fmtPct(metrics.trsGlobal)}</span>
+          </div>
+          <canvas id="trs-gauge" class="mini-chart"></canvas>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Tendance KPI</h2>
+            <span class="badge blue">12 derniers jours</span>
+          </div>
+          <canvas id="kpi-trend" class="chart"></canvas>
+        </section>
+      </div>
+    `;
+
+    requestAnimationFrame(() => {
+      drawGauge("trs-gauge", metrics.trsGlobal, "TRS global");
+      drawDailyTrend("kpi-trend", dailyRows);
+    });
+  }
+
+  function renderIndicators() {
+    const events = getFilteredEvents();
+    const metrics = computeMetrics(events);
+    const indicators = [
+      ["TRS Global", fmtPct(metrics.trsGlobal), "Disponibilité nette après arrêts exploitation et maintenance"],
+      ["TRS Exploitation", fmtPct(metrics.trsExploitation), "Impact des arrêts exploitation"],
+      ["TRS Maintenance", fmtPct(metrics.trsMaintenance), "Impact maintenance électrique, instrumentation, mécanique et bande"],
+      ["TRG Global", fmtPct(metrics.trgGlobal), "Temps de marche / temps disponible"],
+      ["Débit global", `${fmtNumber(metrics.cadenceTph, 0)} t/h`, "Tonnage chargé / heures de marche"],
+      ["Temps d'arrêt", fmtHours(metrics.totalStopHours), "Somme des arrêts filtrés"],
+      ["MTTR", fmtHours(computeMttr(events)), "Durée moyenne des interventions"],
+      ["MTBF", fmtHours(computeMtbf(events)), "Temps moyen entre deux arrêts"]
+    ];
+
+    els.view.innerHTML = `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Indicateurs de performance</h2>
+            <p class="status-line">Calcul automatique à partir des arrêts, tonnages, trains et navires intégrés depuis Excel ou saisis dans TRACE-PORT.</p>
+          </div>
+          <span class="badge cyan">Temps réel</span>
+        </div>
+        <div class="indicator-grid">
+          ${indicators.map(([label, value, body]) => `
+            <article class="indicator-card">
+              <span>${escapeHtml(label)}</span>
+              <strong>${value}</strong>
+              <p>${escapeHtml(body)}</p>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Détail des calculs</h2>
+          <button class="ghost-button" type="button" data-target-view="formulas">Voir les formules Excel reprises</button>
+        </div>
+        ${renderQualitySummary(metrics)}
+      </section>
+    `;
+
+    bindQuickActions();
+  }
+
+  function renderParetoAnalysis() {
+    const events = getFilteredEvents();
+    const pareto = topGroups(groupSum(events, "family"), 12);
+    const total = sum(events, "durationHours");
+
+    els.view.innerHTML = `
+      <div class="metric-grid">
+        ${metric("Causes analysées", fmtNumber(pareto.length, 0), "Top familles")}
+        ${metric("Cause principale", escapeHtml(pareto[0]?.label || "-"), fmtHours(pareto[0]?.value || 0))}
+        ${metric("Durée totale", fmtHours(total), "Base filtrée")}
+        ${metric("Part Top 3", fmtPct(ratio(sum(pareto.slice(0, 3), "value"), total)), "Priorisation maintenance")}
+      </div>
+      <div class="two-col">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Répartition par nature</h2>
+            <span class="badge">${fmtHours(total)}</span>
+          </div>
+          ${renderProgressList(pareto.slice(0, 8), total)}
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Courbe de Pareto</h2>
+            <span class="badge warn">% cumulé</span>
+          </div>
+          <canvas id="pareto-analysis-chart" class="chart"></canvas>
+        </section>
+      </div>
+    `;
+
+    requestAnimationFrame(() => drawPareto("pareto-analysis-chart", pareto, total));
+  }
+
+  function renderPerformanceCircuits() {
+    const events = getFilteredEvents();
+    const metrics = computeMetrics(events);
+    const circuits = buildCircuitPerformance(metrics);
+    const chargingRows = buildSynthesisRows(events, CHARGING_SECTIONS, metrics.chargingAvailableHours);
+    const dischargeRows = buildSynthesisRows(events, DISCHARGE_SECTIONS, Math.max(getAllDays().length * 48, 1));
+
+    els.view.innerHTML = `
+      <div class="metric-grid">
+        ${circuits.map((row, index) => kpiCard(row.label, fmtPct(row.value), "Performance circuit", ["green", "blue", "amber", "teal"][index] || "blue")).join("")}
+      </div>
+      <div class="two-col">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Performance circuits</h2>
+            <span class="badge cyan">TRS</span>
+          </div>
+          <canvas id="performance-circuit-chart" class="chart"></canvas>
+        </section>
+        <section class="panel">
+          <h2>Synthèse chargement</h2>
+          ${renderSynthesisMini(chargingRows, metrics.chargingAvailableHours)}
+        </section>
+      </div>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Synthèse déchargement trains</h2>
+          <span class="badge">DA10 / DB10</span>
+        </div>
+        ${renderSynthesisMini(dischargeRows, Math.max(getAllDays().length * 48, 1))}
+      </section>
+    `;
+
+    requestAnimationFrame(() => drawCircuitBars("performance-circuit-chart", circuits));
+  }
+
+  function renderExportData() {
+    els.view.innerHTML = `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Export des données</h2>
+            <p class="status-line">Exports opérationnels pour remplacer les extractions Excel manuelles et alimenter les rapports.</p>
+          </div>
+          <span class="badge">${fmtNumber(getAllEvents().length, 0)} arrêts</span>
+        </div>
+        <div class="export-grid">
+          ${exportCard("Journal des arrêts", "CSV compatible Excel", "Exporter CSV", "events-csv")}
+          ${exportCard("Synthèse complète", "JSON avec KPI, trains, navires et Pareto", "Exporter JSON", "summary-json")}
+          ${exportCard("Rapport journalier", "HTML imprimable / PDF navigateur", "Générer", "report-daily")}
+          ${exportCard("Rapport mensuel", "HTML imprimable / PDF navigateur", "Générer", "report-monthly")}
+        </div>
+      </section>
+    `;
+
+    bindExportCards();
+  }
+
+  function renderReports() {
+    const isMonthly = state.view === "monthlyReports";
+    const reportType = isMonthly ? "mensuel" : "journalier";
+    const rows = buildReportRows(isMonthly ? "monthly" : "daily");
+
+    els.view.innerHTML = `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Rapports ${isMonthly ? "mensuels" : "journaliers"}</h2>
+            <p class="status-line">Génération automatique à partir des synthèses recalculées par TRACE-PORT.</p>
+          </div>
+          <div class="inline-actions">
+            <button class="primary-button" type="button" data-report-kind="${isMonthly ? "monthly" : "daily"}" data-report-format="html">Générer PDF</button>
+            <button class="ghost-button" type="button" data-report-kind="${isMonthly ? "monthly" : "daily"}" data-report-format="csv">Générer Excel</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Nom du rapport</th><th>Type</th><th>Période</th><th>Généré le</th><th>Actions</th></tr></thead>
+            <tbody>
+              ${rows.map((row) => `
+                <tr>
+                  <td>${escapeHtml(row.name)}</td>
+                  <td>${escapeHtml(reportType)}</td>
+                  <td>${escapeHtml(row.period)}</td>
+                  <td>${fmtDateTime(row.generatedAt)}</td>
+                  <td>
+                    <button class="table-action" type="button" data-report-kind="${isMonthly ? "monthly" : "daily"}" data-report-format="html">PDF</button>
+                    <button class="table-action" type="button" data-report-kind="${isMonthly ? "monthly" : "daily"}" data-report-format="csv">Excel</button>
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+
+    bindReportButtons();
+  }
+
+  function renderEquipments() {
+    const equipments = buildEquipmentRows();
+    els.view.innerHTML = `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Équipements et circuits</h2>
+            <p class="status-line">Référentiel opérationnel extrait des S/E, sous-équipements, trains et circuits de chargement/déchargement.</p>
+          </div>
+          <button class="primary-button" type="button" data-reference-add="equipment">Ajouter</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Code</th><th>Équipement</th><th>Circuit</th><th>Arrêts</th><th>Durée</th><th>Statut</th></tr></thead>
+            <tbody>
+              ${equipments.map((row) => `
+                <tr>
+                  <td>${escapeHtml(row.code)}</td>
+                  <td>${escapeHtml(row.name)}</td>
+                  <td>${escapeHtml(row.circuit)}</td>
+                  <td>${fmtNumber(row.count, 0)}</td>
+                  <td>${fmtHours(row.hours)}</td>
+                  <td><span class="status-pill green">Actif</span></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+    bindReferenceActions();
+  }
+
+  function renderStopNatures() {
+    const totals = groupSum(getFilteredEvents(), "family");
+    const families = unique([...DATA.families.map((f) => f.name), ...Array.from(totals.keys())]);
+    els.view.innerHTML = `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Natures d'arrêt</h2>
+            <p class="status-line">Référentiel des familles utilisées dans les SUMIFS Excel, le Pareto et les validations.</p>
+          </div>
+          <button class="primary-button" type="button" data-reference-add="nature">Ajouter</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Code</th><th>Libellé</th><th>Catégorie</th><th>Durée mensuelle</th><th>Exemples</th><th>Actif</th></tr></thead>
+            <tbody>
+              ${families.map((family, index) => {
+                const source = DATA.families.find((item) => normalize(item.name) === normalize(family));
+                return `
+                  <tr>
+                    <td>NA-${String(index + 1).padStart(2, "0")}</td>
+                    <td>${escapeHtml(family)}</td>
+                    <td>${escapeHtml(stopCategory(family))}</td>
+                    <td>${fmtHours(totals.get(family) || 0)}</td>
+                    <td>${escapeHtml(source?.examples || "-")}</td>
+                    <td><button class="switch is-on" type="button" data-reference-toggle>Actif</button></td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+    bindReferenceActions();
+  }
+
+  function renderUsers() {
+    els.view.innerHTML = `
+      <div class="two-col">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Utilisateurs</h2>
+              <p class="status-line">Gestion RBAC pour agent, chef d'équipe, superviseur, responsable et administrateur.</p>
+            </div>
+            <button class="primary-button" type="button" data-reference-add="user">Ajouter</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Nom</th><th>Prénom</th><th>Rôle</th><th>Service</th><th>Statut</th></tr></thead>
+              <tbody>
+                ${USERS.map((user) => `
+                  <tr>
+                    <td>${escapeHtml(user.lastName)}</td>
+                    <td>${escapeHtml(user.firstName)}</td>
+                    <td>${escapeHtml(user.role)}</td>
+                    <td>${escapeHtml(user.service)}</td>
+                    <td><span class="status-pill green">${escapeHtml(user.status)}</span></td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <section class="panel">
+          <h2>Rôles et permissions</h2>
+          <div class="split-list">
+            ${ROLES.map((role) => `
+              <div class="list-row">
+                <div>
+                  <strong>${escapeHtml(role.name)}</strong>
+                  <p class="status-line">${escapeHtml(role.permissions)}</p>
+                </div>
+                <span class="badge cyan">RBAC</span>
+              </div>
+            `).join("")}
+          </div>
+        </section>
+      </div>
+    `;
+    bindReferenceActions();
+  }
+
+  function renderSettings() {
+    const settings = [
+      ["Période active", "Janvier 2026"],
+      ["Objectif TRS global", "85 %"],
+      ["Objectif TRS maintenance", "80 %"],
+      ["Mode validation", "Chef d'équipe obligatoire"],
+      ["Exports", "CSV, JSON, HTML imprimable"],
+      ["Source initiale", DATA.sourceWorkbook]
+    ];
+
+    els.view.innerHTML = `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Paramètres TRACE-PORT</h2>
+            <p class="status-line">Paramétrage fonctionnel de la solution et rappel de l'architecture cible enterprise.</p>
+          </div>
+          <span class="badge cyan">RBAC + API REST + PostgreSQL</span>
+        </div>
+        <div class="requirement-grid">
+          ${settings.map(([label, value]) => `
+            <article class="requirement">
+              <strong>${escapeHtml(label)}</strong>
+              <p>${escapeHtml(value)}</p>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Architecture 3 tiers cible</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Couche</th><th>Technologie</th><th>Responsabilité</th></tr></thead>
+            <tbody>
+              <tr><td>Frontend</td><td>React / Next.js, TypeScript, TailwindCSS, Shadcn/UI, Recharts</td><td>Interfaces métier, dashboards, formulaires, filtres</td></tr>
+              <tr><td>Backend</td><td>Node.js Express, API REST, JWT, RBAC</td><td>Contrôles métier, validation, KPI, rapports, sécurité</td></tr>
+              <tr><td>Base de données</td><td>PostgreSQL</td><td>Arrêts, utilisateurs, référentiels, validations, logs et rapports</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderLogs() {
+    const logs = buildLogs();
+    els.view.innerHTML = `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Historique des actions</h2>
+            <p class="status-line">Traçabilité complète : connexions, créations, validations, rejets, exports et changements de statut.</p>
+          </div>
+          <span class="badge">${logs.length} logs</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Date / heure</th><th>Utilisateur</th><th>Action</th><th>Détail</th><th>Objet</th></tr></thead>
+            <tbody>
+              ${logs.map((log) => `
+                <tr>
+                  <td>${fmtDateTime(log.at)}</td>
+                  <td>${escapeHtml(log.user)}</td>
+                  <td>${escapeHtml(log.action)}</td>
+                  <td>${escapeHtml(log.detail)}</td>
+                  <td>${escapeHtml(log.objectId || "-")}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
   }
 
   function renderEntry() {
@@ -1070,9 +1730,9 @@
     return `
       <div class="quick-actions">
         <button class="quick-button blue" type="button" data-target-view="entry">Nouvel arrêt</button>
-        <button class="quick-button teal" type="button" data-target-view="flow">Trains & navires</button>
-        <button class="quick-button purple" type="button" data-target-view="daily">Synthèse journalière</button>
-        <button class="quick-button orange" type="button" data-target-view="monthly">Synthèse mensuelle</button>
+        <button class="quick-button teal" type="button" data-target-view="currentStops">Arrêts en cours</button>
+        <button class="quick-button purple" type="button" data-target-view="dailyReports">Rapport journalier</button>
+        <button class="quick-button orange" type="button" data-target-view="kpiDashboard">Tableaux KPI</button>
       </div>
     `;
   }
@@ -1085,6 +1745,313 @@
         render();
       });
     });
+  }
+
+  function decorateEvents(events) {
+    return events.map(decorateEvent);
+  }
+
+  function decorateEvent(event) {
+    if (!event) return null;
+    const override = getValidationOverrides()[event.id];
+    return {
+      ...event,
+      declaredBy: event.declaredBy || declaredByForEvent(event),
+      status: override?.status || event.status || defaultStatusForEvent(event),
+      validatedBy: override?.by || event.validatedBy || "",
+      validatedAt: override?.at || event.validatedAt || "",
+      validationComment: override?.comment || event.validationComment || ""
+    };
+  }
+
+  function declaredByForEvent(event) {
+    const names = [CURRENT_USER.name, "Ahmed Benali", "Youssef El Amrani", "Khadija Saidi", "Système Excel"];
+    return names[hashString(event.id || event.row || event.description) % names.length];
+  }
+
+  function defaultStatusForEvent(event) {
+    const hash = hashString(event.id || event.row || event.description);
+    if (String(event.id || "").startsWith("LOCAL-")) return "pending";
+    if (hash % 17 === 0) return "rejected";
+    if (hash % 5 === 0 || Number(event.durationHours) >= 2) return "pending";
+    return "validated";
+  }
+
+  function statusLabel(status) {
+    return {
+      pending: "En attente",
+      validated: "Validé",
+      rejected: "Rejeté"
+    }[status] || "En attente";
+  }
+
+  function statusTone(status) {
+    return {
+      pending: "amber",
+      validated: "green",
+      rejected: "red"
+    }[status] || "amber";
+  }
+
+  function findEventById(id) {
+    return getAllEvents().find((event) => event.id === id);
+  }
+
+  function renderOperationalStopsTable(events, options = {}) {
+    if (!events.length) return `<div class="empty-state">Aucun arrêt disponible.</div>`;
+    return `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>Equipement</th><th>Nature d'arrêt</th><th>Début</th><th>Fin</th><th>Durée</th><th>Statut</th><th>Affectation</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${events.map((event) => `
+              <tr>
+                <td>${escapeHtml(event.id)}</td>
+                <td>${escapeHtml(event.subEquipment || event.sectionKey || "-")}</td>
+                <td>${escapeHtml(event.family || "-")}</td>
+                <td>${fmtDateTime(event.start)}</td>
+                <td>${fmtDateTime(event.end)}</td>
+                <td>${fmtHours(event.durationHours)}</td>
+                <td><span class="status-pill ${statusTone(event.status)}">${statusLabel(event.status)}</span></td>
+                <td>${escapeHtml(event.assignment || event.quality || "-")}</td>
+                <td>
+                  <div class="row-actions">
+                    <button class="table-action" type="button" data-detail-id="${escapeAttr(event.id)}">Détail</button>
+                    ${options.validationActions && event.status !== "validated" ? `<button class="table-action green" type="button" data-validate-id="${escapeAttr(event.id)}">Valider</button>` : ""}
+                    ${options.validationActions && event.status !== "rejected" ? `<button class="table-action red" type="button" data-reject-id="${escapeAttr(event.id)}">Rejeter</button>` : ""}
+                  </div>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function bindStopActions() {
+    document.querySelectorAll("[data-detail-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.selectedEventId = button.dataset.detailId;
+        state.view = "stopDetail";
+        document.querySelectorAll(".nav-item").forEach((nav) => nav.classList.remove("active"));
+        render();
+      });
+    });
+    document.querySelectorAll("[data-validate-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        updateStopStatus(button.dataset.validateId, "validated", "Arrêt validé après contrôle.");
+      });
+    });
+    document.querySelectorAll("[data-reject-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const comment = prompt("Motif du rejet", "Information à corriger avant exploitation.");
+        updateStopStatus(button.dataset.rejectId, "rejected", comment || "Arrêt rejeté.");
+      });
+    });
+  }
+
+  function updateStopStatus(id, status, comment) {
+    const overrides = getValidationOverrides();
+    overrides[id] = {
+      status,
+      by: CURRENT_USER.name,
+      at: new Date().toISOString(),
+      comment
+    };
+    saveValidationOverrides(overrides);
+    addLog(status === "validated" ? "Validation" : "Rejet", id, comment);
+    render();
+  }
+
+  function buildEventHistory(event) {
+    const logs = getLocalLogs().filter((log) => log.objectId === event.id);
+    const base = [
+      {
+        at: event.createdAt || event.start || new Date().toISOString(),
+        user: event.declaredBy,
+        action: "Création",
+        detail: "Nouvel arrêt saisi dans TRACE-PORT."
+      }
+    ];
+    if (event.status === "validated") {
+      base.push({
+        at: event.validatedAt || event.end || new Date().toISOString(),
+        user: event.validatedBy || "Youssef El Amrani",
+        action: "Validation",
+        detail: event.validationComment || "Arrêt validé et intégré aux synthèses."
+      });
+    }
+    if (event.status === "rejected") {
+      base.push({
+        at: event.validatedAt || event.end || new Date().toISOString(),
+        user: event.validatedBy || "Youssef El Amrani",
+        action: "Rejet",
+        detail: event.validationComment || "Arrêt rejeté pour correction."
+      });
+    }
+    return [...logs, ...base].slice(0, 8);
+  }
+
+  function detailItem(label, value) {
+    return `
+      <div class="detail-item">
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(value)}</strong>
+      </div>
+    `;
+  }
+
+  function circuitForSection(sectionKey) {
+    if (CHARGING_SECTIONS.includes(sectionKey)) return "Circuit de chargement";
+    if (DISCHARGE_SECTIONS.includes(sectionKey)) return "Circuit de déchargement";
+    return "Circuit logistique";
+  }
+
+  function computeMttr(events) {
+    const maintenanceSet = new Set(MAINTENANCE_FAMILIES.map(normalize));
+    const maintenanceEvents = events.filter((event) => maintenanceSet.has(normalize(event.family)));
+    return average(maintenanceEvents.map((event) => Number(event.durationHours)).filter(Number.isFinite));
+  }
+
+  function computeMtbf(events) {
+    const days = Math.max(getAllDays().length, 1);
+    const runningHours = days * 24 * Math.max(CHARGING_SECTIONS.length, 1) - sum(events, "durationHours");
+    return events.length ? runningHours / events.length : runningHours;
+  }
+
+  function exportCard(title, body, buttonLabel, action) {
+    return `
+      <article class="export-card">
+        <strong>${escapeHtml(title)}</strong>
+        <p>${escapeHtml(body)}</p>
+        <button class="primary-button" type="button" data-export-action="${escapeAttr(action)}">${escapeHtml(buttonLabel)}</button>
+      </article>
+    `;
+  }
+
+  function bindExportCards() {
+    document.querySelectorAll("[data-export-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const action = button.dataset.exportAction;
+        if (action === "events-csv") exportEventsCsv();
+        if (action === "summary-json") exportSummaryJson();
+        if (action === "report-daily") downloadReport("daily", "html");
+        if (action === "report-monthly") downloadReport("monthly", "html");
+      });
+    });
+  }
+
+  function buildReportRows(kind) {
+    if (kind === "monthly") {
+      return [
+        { name: "Rapport mensuel - Janvier 2026", period: "01/2026", generatedAt: "2026-02-01T08:30:00" },
+        { name: "Synthèse KPI mensuelle", period: "01/2026", generatedAt: "2026-02-01T08:35:00" }
+      ];
+    }
+    return getAllDays().slice(0, 8).map((day) => ({
+      name: `Rapport journalier - ${fmtDateFromKey(day)}`,
+      period: fmtDateFromKey(day),
+      generatedAt: `${day}T11:00:00`
+    }));
+  }
+
+  function bindReportButtons() {
+    document.querySelectorAll("[data-report-kind]").forEach((button) => {
+      button.addEventListener("click", () => downloadReport(button.dataset.reportKind, button.dataset.reportFormat));
+    });
+  }
+
+  function downloadReport(kind, format) {
+    const events = getFilteredEvents();
+    const metrics = computeMetrics(events);
+    const filenameBase = `trace-port-rapport-${kind}`;
+    addLog("Export rapport", filenameBase, `Génération rapport ${kind} au format ${format}.`);
+    if (format === "csv") {
+      const rows = [
+        ["KPI", "Valeur"],
+        ["TRS global", fmtPct(metrics.trsGlobal)],
+        ["TRS exploitation", fmtPct(metrics.trsExploitation)],
+        ["TRS maintenance", fmtPct(metrics.trsMaintenance)],
+        ["Temps d'arrêt", fmtHours(metrics.totalStopHours)],
+        ["Nombre d'arrêts", fmtNumber(events.length, 0)]
+      ].map((row) => row.map(csvCell).join(";"));
+      downloadFile(`${filenameBase}.csv`, rows.join("\n"), "text/csv;charset=utf-8");
+      return;
+    }
+    const body = `
+      <!doctype html><html lang="fr"><meta charset="utf-8"><title>TRACE-PORT ${kind}</title>
+      <style>body{font-family:Arial;margin:32px;color:#10284b}table{border-collapse:collapse;width:100%}td,th{border:1px solid #d7dee8;padding:8px}h1{color:#0b315f}</style>
+      <h1>TRACE-PORT - Rapport ${kind === "monthly" ? "mensuel" : "journalier"}</h1>
+      <p>Généré le ${new Date().toLocaleString("fr-FR")}</p>
+      <table><tr><th>KPI</th><th>Valeur</th></tr>
+      <tr><td>TRS global</td><td>${fmtPct(metrics.trsGlobal)}</td></tr>
+      <tr><td>TRS exploitation</td><td>${fmtPct(metrics.trsExploitation)}</td></tr>
+      <tr><td>TRS maintenance</td><td>${fmtPct(metrics.trsMaintenance)}</td></tr>
+      <tr><td>Temps d'arrêt</td><td>${fmtHours(metrics.totalStopHours)}</td></tr>
+      <tr><td>Nombre d'arrêts</td><td>${fmtNumber(events.length, 0)}</td></tr>
+      </table></html>
+    `;
+    downloadFile(`${filenameBase}.html`, body, "text/html;charset=utf-8");
+  }
+
+  function buildEquipmentRows() {
+    const events = getAllEvents();
+    const grouped = new Map();
+    events.forEach((event) => {
+      const code = event.subEquipment || event.sectionKey || "NON-AFFECTE";
+      const current = grouped.get(code) || {
+        code,
+        name: event.subEquipment || event.sectionKey || "Non affecté",
+        circuit: circuitForSection(event.sectionKey),
+        count: 0,
+        hours: 0
+      };
+      current.count += 1;
+      current.hours += Number(event.durationHours) || 0;
+      grouped.set(code, current);
+    });
+    return Array.from(grouped.values()).sort((a, b) => b.hours - a.hours).slice(0, 120);
+  }
+
+  function bindReferenceActions() {
+    document.querySelectorAll("[data-reference-add]").forEach((button) => {
+      button.addEventListener("click", () => {
+        addLog("Référentiel", button.dataset.referenceAdd, "Ouverture de l'action d'ajout référentiel.");
+        alert("Prototype TRACE-PORT : l'ajout est préparé pour le backend PostgreSQL.");
+      });
+    });
+    document.querySelectorAll("[data-reference-toggle]").forEach((button) => {
+      button.addEventListener("click", () => {
+        button.classList.toggle("is-on");
+        button.textContent = button.classList.contains("is-on") ? "Actif" : "Inactif";
+        addLog("Référentiel", "nature-arret", `Statut changé en ${button.textContent}.`);
+      });
+    });
+  }
+
+  function stopCategory(family) {
+    const value = normalize(family);
+    if (MAINTENANCE_FAMILIES.map(normalize).includes(value)) return "Maintenance";
+    if (EXTERNAL_FAMILIES.map(normalize).includes(value)) return "Externe";
+    if (value === "exploitation") return "Exploitation";
+    return "Opérationnel";
+  }
+
+  function buildLogs() {
+    const generated = decorateEvents(getAllEvents()).slice(0, 12).map((event, index) => ({
+      id: `AUTO-${index}`,
+      at: event.validatedAt || event.end || event.start,
+      user: event.status === "validated" ? "Youssef El Amrani" : event.declaredBy,
+      action: event.status === "validated" ? "Validation" : event.status === "rejected" ? "Rejet" : "Création",
+      objectId: event.id,
+      detail: `${statusLabel(event.status)} - ${event.family || "arrêt"} sur ${event.subEquipment || event.sectionKey || "équipement"}`
+    }));
+    return [...getLocalLogs(), ...generated].sort((a, b) => new Date(b.at) - new Date(a.at));
   }
 
   function computeMetrics(events) {
@@ -1206,6 +2173,9 @@
     localEvents.push({
       id: `LOCAL-${Date.now()}`,
       row: null,
+      declaredBy: CURRENT_USER.name,
+      status: "pending",
+      createdAt: new Date().toISOString(),
       sectionKey: form.elements.sectionKey.value,
       subEquipment: form.elements.subEquipment.value.trim(),
       family: form.elements.family.value,
@@ -1584,6 +2554,39 @@
     return ["#dc2626", "#f97316", "#facc15", "#2563eb", "#20b970", "#7c5ce6", "#12a39b"][index % 7];
   }
 
+  function drawGauge(id, value, label) {
+    const canvas = document.getElementById(id);
+    if (!canvas) return;
+    const ctx = setupCanvas(canvas);
+    const w = canvas.width / pixelRatio();
+    const h = canvas.height / pixelRatio();
+    const cx = w / 2;
+    const cy = h * 0.64;
+    const radius = Math.min(w, h) * 0.34;
+    const start = Math.PI;
+    const end = Math.PI * 2;
+    const clamped = Math.max(0, Math.min(Number(value) || 0, 1));
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.lineWidth = 18;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, start, end);
+    ctx.strokeStyle = "#e5edf7";
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, start, start + Math.PI * clamped);
+    ctx.strokeStyle = clamped >= 0.85 ? "#20b970" : clamped >= 0.75 ? "#f59e0b" : "#dc2626";
+    ctx.stroke();
+    ctx.fillStyle = "#10284b";
+    ctx.font = "800 30px Segoe UI";
+    ctx.textAlign = "center";
+    ctx.fillText(fmtPct(clamped), cx, cy - 10);
+    ctx.fillStyle = "#64748b";
+    ctx.font = "13px Segoe UI";
+    ctx.fillText(label, cx, cy + 18);
+  }
+
   function drawDonut(id, data, total) {
     const canvas = document.getElementById(id);
     if (!canvas || !data.length) return;
@@ -1908,6 +2911,12 @@
 
   function unique(values) {
     return Array.from(new Set(values.map((value) => String(value).trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "fr"));
+  }
+
+  function hashString(value) {
+    return String(value || "").split("").reduce((acc, char) => {
+      return ((acc << 5) - acc + char.charCodeAt(0)) >>> 0;
+    }, 0);
   }
 
   function normalize(value) {

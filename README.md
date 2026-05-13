@@ -12,13 +12,18 @@ Le fichier Excel source représente un seul mois. TRACE-PORT conserve cette logi
 - `app.js` : moteur de calcul des KPI et vues interactives.
 - `app-data.js` : données extraites du classeur Excel.
 - `styles.css` : mise en forme responsive.
+- `database/schema.sql` : modèle PostgreSQL cible.
+- `backend/src/server.js` : squelette API Express avec JWT/RBAC, arrêts, validations, KPI, rapports et logs.
+- `docs/architecture-trace-port.md` : architecture technique 3 tiers et endpoints API.
 - `tools/extract-workbook.ps1` : extracteur Excel vers base JavaScript.
 - `static-server.mjs` : serveur local optionnel.
 - `solution-digitale-trace-port.md` : note de conception PFE.
 
 ## Vision fonctionnelle
 
+- Sidebar complète inspirée d'une plateforme MES/ERP : gestion des arrêts, analyse KPI, rapports, paramètres et traçabilité.
 - Saisie directe des arrêts par les agents de quart.
+- Consultation de `Mes arrêts`, suivi des `Arrêts en cours`, fiche détail incident et workflow de validation/rejet.
 - Synthèse journalière recalculée à partir des arrêts, trains, navires et tonnages du jour.
 - Synthèse mensuelle consolidant les données quotidiennes du mois.
 - Ajout des trains reçus tout au long de la journée avec wagons, tonnage, durée, retard et cadence.
@@ -27,6 +32,7 @@ Le fichier Excel source représente un seul mois. TRACE-PORT conserve cette logi
 - Base centralisée pour équipements, circuits, familles d'arrêts, utilisateurs et indicateurs.
 - Recalcul automatique des temps d'arrêt, TRS, débits, Pareto et synthèses.
 - Dashboards de pilotage pour arrêts en cours, performances, tendances et alertes.
+- Modules KPI, Pareto, performance circuits, rapports journaliers/mensuels, exports et référentiels.
 - Historisation des créations, modifications, validations, rejets et suppressions.
 - Réduction des gaspillages Lean : double saisie, consolidation manuelle, recalculs répétitifs et contrôles Excel.
 
