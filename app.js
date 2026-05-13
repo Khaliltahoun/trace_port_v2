@@ -2,7 +2,9 @@
   "use strict";
 
   const DATA = window.PFE_DATA;
-  const STORAGE_KEY = "trace-port-digital-events-v1";
+  const EVENTS_KEY = "trace-port-digital-events-v1";
+  const TRAINS_KEY = "trace-port-digital-trains-v1";
+  const SHIPS_KEY = "trace-port-digital-ships-v1";
   const CHARGING_SECTIONS = ["CA30", "CB30", "CC30", "CD30"];
   const DISCHARGE_SECTIONS = ["DA10", "DB10"];
   const MAINTENANCE_FAMILIES = ["électrique", "instrumentation", "mécanique", "bande"];
@@ -90,6 +92,7 @@
       quality: "all",
       search: ""
     },
+    dailyDate: null,
     formulaSearch: "",
     formulaSheet: "all"
   };
@@ -161,18 +164,50 @@
 
   function getLocalEvents() {
     try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+      return JSON.parse(localStorage.getItem(EVENTS_KEY) || "[]");
     } catch {
       return [];
     }
   }
 
   function saveLocalEvents(events) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+    localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
   }
 
   function getAllEvents() {
     return [...DATA.events, ...getLocalEvents()];
+  }
+
+  function getLocalTrains() {
+    try {
+      return JSON.parse(localStorage.getItem(TRAINS_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  }
+
+  function saveLocalTrains(trains) {
+    localStorage.setItem(TRAINS_KEY, JSON.stringify(trains));
+  }
+
+  function getAllTrains() {
+    return [...DATA.trains, ...getLocalTrains()];
+  }
+
+  function getLocalShips() {
+    try {
+      return JSON.parse(localStorage.getItem(SHIPS_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  }
+
+  function saveLocalShips(ships) {
+    localStorage.setItem(SHIPS_KEY, JSON.stringify(ships));
+  }
+
+  function getAllShips() {
+    return [...DATA.ships, ...getLocalShips()];
   }
 
   function getFilteredEvents() {
@@ -199,6 +234,8 @@
   function render() {
     const title = {
       dashboard: "Tableau de bord",
+      daily: "Synthèse journalière",
+      monthly: "Synthèse mensuelle",
       events: "Bilan des arrêts",
       entry: "Saisie des arrêts",
       tonnage: "Tonnage",
@@ -210,6 +247,8 @@
 
     const renderers = {
       dashboard: renderDashboard,
+      daily: renderDailySynthesis,
+      monthly: renderMonthlySynthesis,
       events: renderEvents,
       entry: renderEntry,
       tonnage: renderTonnage,
@@ -271,6 +310,190 @@
     requestAnimationFrame(() => {
       drawPareto("pareto-chart", pareto, metrics.totalStopHours);
     });
+  }
+
+  function renderDailySynthesis() {
+    const days = getAllDays();
+    if (!state.dailyDate || !days.includes(state.dailyDate)) {
+      state.dailyDate = days[0] || dateKey(new Date().toISOString());
+    }
+    const summary = computeDaySummary(state.dailyDate);
+    const topFamilies = topGroups(groupSum(summary.events, "family"), 8);
+    const sectionRows = buildSynthesisRows(summary.events, CHARGING_SECTIONS, CHARGING_SECTIONS.length * 24);
+
+    els.view.innerHTML = `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Synthèse journalière</h2>
+            <p class="status-line">Cette fiche se recalcule à partir des arrêts saisis pendant la journée, des trains reçus et des navires chargés.</p>
+          </div>
+          <label>Journée
+            <select id="daily-date">
+              ${days.map((day) => `<option value="${escapeAttr(day)}" ${day === state.dailyDate ? "selected" : ""}>${fmtDateFromKey(day)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <div class="metric-grid">
+        ${metric("Arrêts du jour", fmtHours(summary.stopHours), `${summary.events.length} événements`)}
+        ${metric("Trains reçus", fmtNumber(summary.trainCount, 0), `${fmtNumber(summary.wagonCount, 0)} wagons, ${fmtNumber(summary.trainTonnage, 0)} t`)}
+        ${metric("Navires", fmtNumber(summary.shipCount, 0), `${fmtNumber(summary.shipBascule, 0)} t bascule`)}
+        ${metric("TRS global estimé", fmtPct(summary.trsGlobal), "Base CA/CB/CC/CD sur 24h")}
+      </div>
+
+      <div class="two-col">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Arrêts par S/E</h2>
+            <span class="badge">${fmtDateFromKey(state.dailyDate)}</span>
+          </div>
+          ${renderSynthesisMini(sectionRows, CHARGING_SECTIONS.length * 24)}
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Pareto du jour</h2>
+            <span class="badge warn">${fmtHours(summary.stopHours)}</span>
+          </div>
+          ${renderProgressList(topFamilies, summary.stopHours)}
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Flux journalier</h2>
+          <span class="badge cyan">Chargement + déchargement</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Bloc</th><th>Volume / nombre</th><th>Durée</th><th>Indicateur</th></tr></thead>
+            <tbody>
+              <tr><td>Tonnage pesage</td><td>${fmtNumber(summary.pesageTotal, 0)} t</td><td>-</td><td>Draft : ${fmtNumber(summary.draftTotal, 0)} t</td></tr>
+              <tr><td>Déchargement trains</td><td>${fmtNumber(summary.trainTonnage, 0)} t</td><td>${fmtHours(summary.trainDurationHours)}</td><td>${fmtNumber(summary.trainCadence, 0)} t/h</td></tr>
+              <tr><td>Chargement navires</td><td>${fmtNumber(summary.shipBascule, 0)} t</td><td>${fmtHours(summary.shipDurationHours)}</td><td>Ecart : ${fmtPct(summary.shipGapRatio)}</td></tr>
+              <tr><td>Arrêts maintenance</td><td>${fmtHours(summary.maintenanceHours)}</td><td>-</td><td>TRS maintenance : ${fmtPct(summary.trsMaintenance)}</td></tr>
+              <tr><td>Arrêts exploitation</td><td>${fmtHours(summary.exploitationHours)}</td><td>-</td><td>TRS exploitation : ${fmtPct(summary.trsExploitation)}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="two-col">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Trains du jour</h2>
+            <span class="badge">${summary.trains.length}</span>
+          </div>
+          ${renderTrainsTable(summary.trains)}
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Navires du jour</h2>
+            <span class="badge">${summary.ships.length}</span>
+          </div>
+          ${renderShipsTable(summary.ships)}
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Détail des arrêts du jour</h2>
+          <span class="badge">${summary.events.length}</span>
+        </div>
+        ${renderEventsTable(summary.events)}
+      </section>
+    `;
+
+    document.getElementById("daily-date").addEventListener("change", (event) => {
+      state.dailyDate = event.target.value;
+      renderDailySynthesis();
+    });
+  }
+
+  function renderMonthlySynthesis() {
+    const events = getFilteredEvents();
+    const metrics = computeMetrics(events);
+    const days = getAllDays();
+    const dailyRows = days.map(computeDaySummary);
+    const chargingRows = buildSynthesisRows(events, CHARGING_SECTIONS, metrics.chargingAvailableHours);
+    const dischargeAvailable = Math.max(days.length * DISCHARGE_SECTIONS.length * 24, sum(getAllTrains(), "affectationHours"));
+    const dischargeRows = buildSynthesisRows(events, DISCHARGE_SECTIONS, dischargeAvailable || 1);
+    const familyRows = topGroups(groupSum(events, "family"), 40);
+    const trains = getAllTrains();
+    const ships = getAllShips();
+
+    els.view.innerHTML = `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Synthèse mensuelle</h2>
+            <p class="status-line">Cette fiche correspond à la logique de la première feuille Excel envoyée en fin de mois aux services : elle consolide les arrêts journaliers, les tonnages, les trains et les navires.</p>
+          </div>
+          <span class="badge">Janvier 2026</span>
+        </div>
+      </section>
+
+      <div class="metric-grid">
+        ${metric("Total arrêts", fmtHours(metrics.totalStopHours), `${events.length} lignes Bilan`)}
+        ${metric("Tonnage chargé", fmtNumber(metrics.pesageTotal, 0), "Pesage mensuel")}
+        ${metric("Trains", fmtNumber(sum(trains, "trains"), 0), `${fmtNumber(sum(trains, "totalTonnage"), 0)} t déchargées`)}
+        ${metric("Navires", fmtNumber(ships.length, 0), `${fmtNumber(sum(ships, "connaissement"), 0)} t connaissement`)}
+      </div>
+
+      <div class="two-col">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Chargement des navires</h2>
+            <span class="badge">CA30 / CB30 / CC30 / CD30</span>
+          </div>
+          ${renderSynthesisMini(chargingRows, metrics.chargingAvailableHours)}
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Déchargement des trains</h2>
+            <span class="badge cyan">DA10 / DB10</span>
+          </div>
+          ${renderSynthesisMini(dischargeRows, dischargeAvailable || 1)}
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Pareto mensuel des arrêts</h2>
+          <span class="badge warn">${fmtHours(metrics.totalStopHours)}</span>
+        </div>
+        ${renderProgressList(familyRows.slice(0, 15), metrics.totalStopHours)}
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Synthèse par journée</h2>
+          <span class="badge">${days.length} jours</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Jour</th><th>Arrêts</th><th>Trains</th><th>Tonnage trains</th><th>Navires</th><th>Bascule navires</th><th>Pesage</th><th>TRS global</th></tr>
+            </thead>
+            <tbody>
+              ${dailyRows.map((row) => `
+                <tr>
+                  <td>${fmtDateFromKey(row.day)}</td>
+                  <td>${fmtHours(row.stopHours)}</td>
+                  <td>${fmtNumber(row.trainCount, 0)}</td>
+                  <td>${fmtNumber(row.trainTonnage, 0)} t</td>
+                  <td>${fmtNumber(row.shipCount, 0)}</td>
+                  <td>${fmtNumber(row.shipBascule, 0)} t</td>
+                  <td>${fmtNumber(row.pesageTotal, 0)} t</td>
+                  <td>${fmtPct(row.trsGlobal)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
   }
 
   function renderEvents() {
@@ -405,19 +628,68 @@
   }
 
   function renderFlow() {
-    const trainTotal = sum(DATA.trains, "totalTonnage");
-    const wagons = sum(DATA.trains, "wagons");
-    const shipsBascule = sum(DATA.ships, "bascule");
-    const shipsConnaissement = sum(DATA.ships, "connaissement");
-    const trainCadence = average(DATA.trains.map((t) => t.cadenceTph).filter(Number.isFinite));
+    const trains = getAllTrains();
+    const ships = getAllShips();
+    const qualityOptions = unique([...Object.keys(DATA.tonnage[0]?.pesage || {}), ...ships.map((s) => s.quality).filter(Boolean)]);
+    const trainTotal = sum(trains, "totalTonnage");
+    const wagons = sum(trains, "wagons");
+    const shipsBascule = sum(ships, "bascule");
+    const shipsConnaissement = sum(ships, "connaissement");
+    const trainCadence = average(trains.map((t) => t.cadenceTph).filter(Number.isFinite));
 
     els.view.innerHTML = `
       <div class="metric-grid">
-        ${metric("Trains", fmtNumber(sum(DATA.trains, "trains"), 0), `${fmtNumber(wagons, 0)} wagons`)}
+        ${metric("Trains", fmtNumber(sum(trains, "trains"), 0), `${fmtNumber(wagons, 0)} wagons`)}
         ${metric("Tonnage trains", fmtNumber(trainTotal, 0), "Total déchargé")}
-        ${metric("Navires", fmtNumber(DATA.ships.length, 0), "Suivi de chargement")}
+        ${metric("Navires", fmtNumber(ships.length, 0), "Suivi de chargement")}
         ${metric("Connaissement", fmtNumber(shipsConnaissement, 0), `${fmtNumber(shipsBascule, 0)} bascule`)}
       </div>
+
+      <div class="two-col">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Ajouter un train</h2>
+            <span class="badge cyan">${getLocalTrains().length} saisies locales</span>
+          </div>
+          <form id="train-form" class="form-grid">
+            <label>Date<input name="day" type="date" required></label>
+            <label>Nombre de trains<input name="trains" type="number" min="1" step="1" required></label>
+            <label>Wagons<input name="wagons" type="number" min="0" step="1"></label>
+            <label>Tonnage total<input name="totalTonnage" type="number" min="0" step="0.01"></label>
+            <label>Durée déchargement (h)<input name="durationHours" type="number" min="0" step="0.01"></label>
+            <label>Retard (h)<input name="delayHours" type="number" min="0" step="0.01"></label>
+            <label class="wide">Observation<input name="observation" placeholder="Retard, anomalie, silo, remarque"></label>
+            <div class="inline-actions full">
+              <button class="primary-button" type="submit">Ajouter train</button>
+              <button class="danger-button" id="clear-local-trains" type="button">Réinitialiser trains locaux</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Ajouter un navire</h2>
+            <span class="badge cyan">${getLocalShips().length} saisies locales</span>
+          </div>
+          <form id="ship-form" class="form-grid">
+            <label>Navire<input name="name" placeholder="Nom du navire" required></label>
+            ${fieldSelect("quality", "Qualité", qualityOptions)}
+            <label>N° EC<input name="ecNumber" placeholder="EC"></label>
+            <label>Début chargement<input name="start" type="datetime-local" required></label>
+            <label>Fin chargement<input name="end" type="datetime-local" required></label>
+            <label>Bascule<input name="bascule" type="number" min="0" step="0.01"></label>
+            <label>Connaissement<input name="connaissement" type="number" min="0" step="0.01"></label>
+            <label>Poste<input name="berth" placeholder="66"></label>
+            <label>Durée calculée<input id="ship-duration-preview" readonly value="0 h"></label>
+            <label class="full">Observation<textarea name="observation" placeholder="Observation chargement"></textarea></label>
+            <div class="inline-actions full">
+              <button class="primary-button" type="submit">Ajouter navire</button>
+              <button class="danger-button" id="clear-local-ships" type="button">Réinitialiser navires locaux</button>
+            </div>
+          </form>
+        </section>
+      </div>
+
       <div class="two-col">
         <section class="panel">
           <h2>Cadence déchargement trains</h2>
@@ -427,29 +699,30 @@
           <h2>Indicateurs trains</h2>
           ${renderProgressList([
             { label: "Cadence moyenne", value: trainCadence },
-            { label: "Durée affectation", value: sum(DATA.trains, "affectationHours") },
-            { label: "Retards", value: sum(DATA.trains, "delayHours") }
-          ], Math.max(trainCadence, sum(DATA.trains, "affectationHours"), 1))}
+            { label: "Durée affectation", value: sum(trains, "affectationHours") },
+            { label: "Retards", value: sum(trains, "delayHours") }
+          ], Math.max(trainCadence, sum(trains, "affectationHours"), 1))}
         </section>
       </div>
       <section class="panel">
         <div class="panel-head">
           <h2>Navires chargés</h2>
-          <span class="badge">${DATA.ships.length}</span>
+          <span class="badge">${ships.length}</span>
         </div>
-        ${renderShipsTable()}
+        ${renderShipsTable(ships)}
       </section>
       <section class="panel">
         <div class="panel-head">
           <h2>Déchargement trains</h2>
-          <span class="badge">${DATA.trains.length} jours saisis</span>
+          <span class="badge">${trains.length} lignes saisies</span>
         </div>
-        ${renderTrainsTable()}
+        ${renderTrainsTable(trains)}
       </section>
     `;
 
+    bindFlowForms();
     requestAnimationFrame(() => {
-      drawBars("train-chart", DATA.trains.map((t) => ({ label: dayLabel(t.day), value: t.cadenceTph || 0 })), {
+      drawBars("train-chart", trains.map((t) => ({ label: dayLabel(t.day), value: t.cadenceTph || 0 })), {
         color: "#1d7892",
         suffix: " t/h"
       });
@@ -677,8 +950,9 @@
 
     const pesageTotal = sum(DATA.tonnage, "pesageTotal");
     const draftTotal = sum(DATA.tonnage, "draftTotal");
-    const shipBascule = sum(DATA.ships, "bascule");
-    const shipConnaissement = sum(DATA.ships, "connaissement");
+    const ships = getAllShips();
+    const shipBascule = sum(ships, "bascule");
+    const shipConnaissement = sum(ships, "connaissement");
     const shipGapRatio = shipConnaissement ? (shipConnaissement - shipBascule) / shipConnaissement : 0;
 
     const dayCount = DATA.tonnage.length || 31;
@@ -729,6 +1003,46 @@
     });
   }
 
+  function computeDaySummary(day) {
+    const events = getAllEvents().filter((event) => dateKey(event.start) === day);
+    const trains = getAllTrains().filter((train) => dateKey(train.day) === day);
+    const ships = getAllShips().filter((ship) => dateKey(ship.start) === day);
+    const tonnage = DATA.tonnage.find((row) => dateKey(row.day) === day);
+    const availableHours = CHARGING_SECTIONS.length * 24;
+    const chargingEvents = events.filter((event) => CHARGING_SECTIONS.includes(event.sectionKey));
+    const exploitationHours = sumByFamily(chargingEvents, ["exploitation"]);
+    const maintenanceHours = sumByFamily(chargingEvents, MAINTENANCE_FAMILIES);
+    const stopHours = sum(events, "durationHours");
+    const trainTonnage = sum(trains, "totalTonnage");
+    const shipBascule = sum(ships, "bascule");
+    const shipConnaissement = sum(ships, "connaissement");
+
+    return {
+      day,
+      events,
+      trains,
+      ships,
+      stopHours,
+      exploitationHours,
+      maintenanceHours,
+      trsExploitation: ratio(availableHours - exploitationHours, availableHours),
+      trsMaintenance: ratio(availableHours - maintenanceHours, availableHours),
+      trsGlobal: ratio(availableHours - exploitationHours - maintenanceHours, availableHours),
+      pesageTotal: tonnage?.pesageTotal || 0,
+      draftTotal: tonnage?.draftTotal || 0,
+      trainCount: sum(trains, "trains"),
+      wagonCount: sum(trains, "wagons"),
+      trainTonnage,
+      trainDurationHours: sum(trains, "durationHours"),
+      trainCadence: sum(trains, "durationHours") ? trainTonnage / sum(trains, "durationHours") : average(trains.map((train) => train.cadenceTph).filter(Number.isFinite)),
+      shipCount: ships.length,
+      shipBascule,
+      shipConnaissement,
+      shipDurationHours: sum(ships, "durationHours"),
+      shipGapRatio: shipConnaissement ? (shipConnaissement - shipBascule) / shipConnaissement : 0
+    };
+  }
+
   function handleEventSubmit(event) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -759,6 +1073,100 @@
     populateFilters();
     form.reset();
     render();
+  }
+
+  function bindFlowForms() {
+    const trainForm = document.getElementById("train-form");
+    const shipForm = document.getElementById("ship-form");
+    const shipPreview = document.getElementById("ship-duration-preview");
+
+    trainForm.addEventListener("submit", handleTrainSubmit);
+    shipForm.addEventListener("submit", handleShipSubmit);
+    document.getElementById("clear-local-trains").addEventListener("click", () => {
+      saveLocalTrains([]);
+      renderFlow();
+    });
+    document.getElementById("clear-local-ships").addEventListener("click", () => {
+      saveLocalShips([]);
+      renderFlow();
+    });
+
+    const updateShipPreview = () => {
+      shipPreview.value = fmtHours(hoursBetweenLocal(shipForm.elements.start.value, shipForm.elements.end.value));
+    };
+    shipForm.elements.start.addEventListener("input", updateShipPreview);
+    shipForm.elements.end.addEventListener("input", updateShipPreview);
+  }
+
+  function handleTrainSubmit(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const durationHours = numberFromInput(form.elements.durationHours.value);
+    const delayHours = numberFromInput(form.elements.delayHours.value);
+    const totalTonnage = numberFromInput(form.elements.totalTonnage.value);
+    const affectationHours = durationHours + delayHours;
+    const localTrains = getLocalTrains();
+
+    localTrains.push({
+      id: `TRAIN-${Date.now()}`,
+      day: `${form.elements.day.value}T00:00:00`,
+      trains: numberFromInput(form.elements.trains.value),
+      wagons: numberFromInput(form.elements.wagons.value),
+      durationHours,
+      averageHours: durationHours && numberFromInput(form.elements.trains.value) ? durationHours / numberFromInput(form.elements.trains.value) : 0,
+      silos: 0,
+      tonnageDA: 0,
+      tonnageDB: 0,
+      tonnageBascule: totalTonnage,
+      totalTonnage,
+      affectationHours,
+      delayHours,
+      cadenceTph: durationHours ? totalTonnage / durationHours : 0,
+      trsMaintenanceExploit: affectationHours ? durationHours / affectationHours : 1,
+      semiWetTrains: 0,
+      observation: form.elements.observation.value.trim()
+    });
+
+    saveLocalTrains(localTrains);
+    renderFlow();
+  }
+
+  function handleShipSubmit(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const start = form.elements.start.value;
+    const end = form.elements.end.value;
+    const durationHours = hoursBetweenLocal(start, end);
+    if (!Number.isFinite(durationHours) || durationHours <= 0) {
+      alert("La fin de chargement doit être supérieure au début.");
+      return;
+    }
+
+    const bascule = numberFromInput(form.elements.bascule.value);
+    const connaissement = numberFromInput(form.elements.connaissement.value);
+    const localShips = getLocalShips();
+    localShips.push({
+      id: `SHIP-${Date.now()}`,
+      number: getAllShips().length + 1,
+      berth: form.elements.berth.value.trim(),
+      name: form.elements.name.value.trim(),
+      quality: form.elements.quality.value,
+      ecNumber: form.elements.ecNumber.value.trim(),
+      start: `${start}:00`,
+      end: `${end}:00`,
+      durationHours,
+      scaleA: 0,
+      scaleB: 0,
+      scaleC: 0,
+      scaleD: 0,
+      bascule,
+      connaissement,
+      gapRatio: connaissement ? (connaissement - bascule) / connaissement : 0,
+      observation: form.elements.observation.value.trim()
+    });
+
+    saveLocalShips(localShips);
+    renderFlow();
   }
 
   function renderEventsTable(events) {
@@ -815,13 +1223,14 @@
     `;
   }
 
-  function renderShipsTable() {
+  function renderShipsTable(ships = getAllShips()) {
+    if (!ships.length) return `<div class="empty-state">Aucun navire disponible.</div>`;
     return `
       <div class="table-wrap">
         <table>
           <thead><tr><th>N°</th><th>Navire</th><th>Qualité</th><th>Début</th><th>Fin</th><th>Durée</th><th>Bascule</th><th>Connaissement</th><th>Ecart</th></tr></thead>
           <tbody>
-            ${DATA.ships.map((ship) => `
+            ${ships.map((ship) => `
               <tr>
                 <td>${fmtNumber(ship.number, 0)}</td>
                 <td>${escapeHtml(ship.name)}</td>
@@ -840,13 +1249,14 @@
     `;
   }
 
-  function renderTrainsTable() {
+  function renderTrainsTable(trains = getAllTrains()) {
+    if (!trains.length) return `<div class="empty-state">Aucun train disponible.</div>`;
     return `
       <div class="table-wrap">
         <table>
           <thead><tr><th>Jour</th><th>Trains</th><th>Wagons</th><th>Durée</th><th>Tonnage</th><th>Cadence</th><th>Retard</th><th>TRS maint+exploit</th></tr></thead>
           <tbody>
-            ${DATA.trains.map((train) => `
+            ${trains.map((train) => `
               <tr>
                 <td>${fmtDate(train.day)}</td>
                 <td>${fmtNumber(train.trains, 0)}</td>
@@ -1147,6 +1557,9 @@
       sourceWorkbook: DATA.sourceWorkbook,
       filters: state.filters,
       metrics: computeMetrics(events),
+      trains: getAllTrains(),
+      ships: getAllShips(),
+      dailySynthesis: getAllDays().map(computeDaySummary),
       topFamilies: topGroups(groupSum(events, "family"), 20),
       topSections: topGroups(groupSum(events, "sectionKey", "Non affecté"), 20)
     };
@@ -1206,6 +1619,26 @@
     return Math.round((ms / 36e5) * 100) / 100;
   }
 
+  function numberFromInput(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+  }
+
+  function dateKey(value) {
+    if (!value) return "";
+    if (value instanceof Date) return value.toISOString().slice(0, 10);
+    return String(value).slice(0, 10);
+  }
+
+  function getAllDays() {
+    return unique([
+      ...getAllEvents().map((event) => dateKey(event.start)),
+      ...getAllTrains().map((train) => dateKey(train.day)),
+      ...getAllShips().map((ship) => dateKey(ship.start)),
+      ...DATA.tonnage.map((row) => dateKey(row.day))
+    ]).filter(Boolean);
+  }
+
   function unique(values) {
     return Array.from(new Set(values.map((value) => String(value).trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "fr"));
   }
@@ -1241,6 +1674,11 @@
   function fmtDate(value) {
     if (!value) return "-";
     return new Date(value).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  }
+
+  function fmtDateFromKey(value) {
+    if (!value) return "-";
+    return new Date(`${value}T00:00:00`).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
   }
 
   function fmtDateTime(value) {

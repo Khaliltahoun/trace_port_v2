@@ -4,6 +4,8 @@ Application locale de digitalisation du fichier `Bilan et synthéses des arrêts
 
 TRACE-PORT vise à remplacer le suivi manuel des arrêts de manutention par une plateforme centralisée pour la saisie, la validation, le calcul automatique des KPI, le suivi temps réel et l'historisation des actions.
 
+Le fichier Excel source représente un seul mois. TRACE-PORT conserve cette logique : les données sont saisies jour par jour, puis la solution génère une synthèse journalière et une synthèse mensuelle équivalente à la première feuille Excel envoyée aux services en fin de mois.
+
 ## Contenu livré
 
 - `index.html` : interface de pilotage Poste de Commande.
@@ -17,6 +19,10 @@ TRACE-PORT vise à remplacer le suivi manuel des arrêts de manutention par une 
 ## Vision fonctionnelle
 
 - Saisie directe des arrêts par les agents de quart.
+- Synthèse journalière recalculée à partir des arrêts, trains, navires et tonnages du jour.
+- Synthèse mensuelle consolidant les données quotidiennes du mois.
+- Ajout des trains reçus tout au long de la journée avec wagons, tonnage, durée, retard et cadence.
+- Ajout des navires avec qualité, début/fin de chargement, bascule, connaissement et écart.
 - Vérification et validation par les chefs d'équipe.
 - Base centralisée pour équipements, circuits, familles d'arrêts, utilisateurs et indicateurs.
 - Recalcul automatique des temps d'arrêt, TRS, débits, Pareto et synthèses.

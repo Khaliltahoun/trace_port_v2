@@ -31,6 +31,10 @@ La valeur ajoutée principale est la disponibilité immédiate de l'information.
 
 ## Périmètre repris depuis Excel
 
+Le fichier Excel fourni correspond à un seul mois d'activité. Sa première feuille, `Synthèses`, représente la fiche mensuelle consolidée envoyée en fin de mois aux différents services. Cette fiche est calculée à partir des données intégrées quotidiennement : arrêts de manutention, tonnages, chargements navires et déchargements trains.
+
+Dans TRACE-PORT, cette logique est conservée mais automatisée : chaque arrêt, train ou navire ajouté pendant la journée alimente immédiatement la synthèse journalière, puis la synthèse mensuelle.
+
 | Feuille Excel | Rôle dans la solution |
 | --- | --- |
 | `Bilan` | Base principale des arrêts : S/E, équipement, nature, début, fin, durée, description, affectation, qualité, destination. |
@@ -46,11 +50,13 @@ La valeur ajoutée principale est la disponibilité immédiate de l'information.
 | Module | Besoin du rapport | Fonction digitale |
 | --- | --- | --- |
 | Tableau de bord | Suivi des KPI du processus manutention | Tonnage, cadence, TRS, TRG, Pareto, familles critiques. |
+| Synthèse journalière | Suivre l'activité pendant la journée | Arrêts du jour, trains reçus, navires chargés, tonnage, TRS et Pareto quotidien. |
+| Synthèse mensuelle | Remplacer la première feuille envoyée aux services | Consolidation automatique des arrêts, trains, navires, tonnages et KPI du mois. |
 | Journal des arrêts | Suivi et saisie des anomalies et arrêts | Table filtrable par S/E, famille, qualité et recherche texte. |
 | Saisie | Remplacer la saisie Excel manuelle | Formulaire reprenant les colonnes du `Bilan`, avec durée automatique. |
 | Workflow de validation | Fiabiliser les données avant exploitation | Statuts cible : saisi, vérifié, validé, rejeté, clôturé. |
 | Tonnage | Rapport journalier/mensuel d'activité | Pesage, draft, qualité, graphique journalier, écarts. |
-| Trains & navires | Coordination flux réel installation/quai/trafic | Déchargement trains, chargement navires, bascule/connaissement. |
+| Trains & navires | Coordination flux réel installation/quai/trafic | Ajout des trains, ajout des navires, déchargement trains, chargement navires, bascule/connaissement. |
 | Formules & requêtes | Garder la traçabilité des calculs Excel | Audit des 3 582 formules extraites et mapping vers le moteur digital. |
 | Besoins PFE | Cadrage Define/Measure/Analyze | Matrice entre besoins métier, données, KPI et modules. |
 
@@ -67,6 +73,29 @@ La valeur ajoutée principale est la disponibilité immédiate de l'information.
 | TRS global | `(durée affectation - exploitation - maintenance) / durée affectation` | Même logique en heures. |
 | Tonnage | `SUM(C:L)` et `SUM(P:Y)` | Somme des qualités pesage et draft. |
 | Ecart navire | `(connaissement - bascule) / connaissement` | Ratio d'écart par navire et global. |
+
+## Logique des synthèses TRACE-PORT
+
+### Synthèse journalière
+
+La synthèse journalière est alimentée en continu par les opérations de la journée :
+
+- Les arrêts ajoutés par les agents de quart alimentent les durées par S/E et par famille.
+- Les trains arrivant tout au long de la journée sont ajoutés avec le nombre de trains, wagons, tonnage, durée et retard.
+- Les navires sont ajoutés avec leur début/fin de chargement, qualité, bascule et connaissement.
+- Les KPI journaliers sont recalculés automatiquement : total arrêts, maintenance, exploitation, TRS, cadence, Pareto du jour, flux chargement et déchargement.
+
+### Synthèse mensuelle
+
+La synthèse mensuelle reprend la logique de la feuille `Synthèses` du classeur Excel :
+
+- Consolidation des arrêts du mois par S/E et par famille.
+- Synthèse séparée pour le chargement navires et le déchargement trains.
+- Calcul des TRS exploitation, maintenance et global.
+- Agrégation des trains, wagons, tonnages déchargés et retards.
+- Agrégation des navires, tonnages bascule, connaissements et écarts.
+- Pareto mensuel des familles d'arrêts.
+- Tableau récapitulatif par journée pour permettre le passage du suivi quotidien à la fiche mensuelle finale.
 
 ## Modèle de données cible
 
