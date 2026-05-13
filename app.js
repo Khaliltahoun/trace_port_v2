@@ -536,6 +536,25 @@
   }
 
   function renderDmaic() {
+    const visionCards = [
+      ["Problème actuel", "Fichiers Excel dispersés, traitements manuels, double saisie papier/Excel, erreurs de consolidation et indicateurs disponibles tardivement."],
+      ["Vision cible", "Plateforme centralisée, automatisée et accessible aux acteurs du processus selon leurs rôles et leurs niveaux d'accès."],
+      ["Objectif opérationnel", "Passer d'un suivi J+30 à une disponibilité quasi immédiate des arrêts, synthèses et KPI de manutention."],
+      ["Valeur ajoutée", "Améliorer durablement la traçabilité, la fiabilité des données, la rapidité de traitement et la qualité de décision."]
+    ];
+    const roles = [
+      ["Agent de quart", "Saisie directe des arrêts depuis un formulaire contrôlé."],
+      ["Chef d'équipe", "Vérification, correction et validation des informations saisies."],
+      ["Responsable exploitation", "Suivi temps réel des arrêts, circuits, tendances et alertes critiques."],
+      ["Direction", "Pilotage global à travers les KPI, rapports et synthèses journalières ou mensuelles."]
+    ];
+    const leanGains = [
+      "Suppression de la double saisie papier/Excel.",
+      "Réduction des consolidations manuelles.",
+      "Recalcul automatique des KPI après saisie ou validation.",
+      "Historisation des créations, modifications, validations, rejets et suppressions.",
+      "Disponibilité temps réel des informations pour accélérer la réaction terrain."
+    ];
     const requirements = [
       ["Saisie des anomalies", "Formulaire structuré reprenant Bilan A:J, avec calcul automatique de la durée."],
       ["Synthèse mensuelle", "SUMIFS digitalisés par S/E et famille, totaux chargement et déchargement."],
@@ -550,6 +569,25 @@
     els.view.innerHTML = `
       <section class="panel">
         <div class="panel-head">
+          <h2>Présentation et vision</h2>
+          <span class="badge">Système d'information centralisé</span>
+        </div>
+        <p class="status-line">
+          TRACE-PORT modernise la traçabilité des arrêts de manutention au sein de la Direction Logistique Portuaire OCP Casablanca. La solution remplace un processus manuel, lent et fragmenté par une plateforme centralisée, contrôlée et orientée temps réel.
+        </p>
+      </section>
+
+      <div class="requirement-grid">
+        ${visionCards.map(([title, body]) => `
+          <article class="requirement">
+            <strong>${escapeHtml(title)}</strong>
+            <p>${escapeHtml(body)}</p>
+          </article>
+        `).join("")}
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
           <h2>Architecture fonctionnelle</h2>
           <span class="badge">Excel vers application</span>
         </div>
@@ -559,13 +597,48 @@
             <tbody>
               <tr><td>Base arrêts</td><td>Journal unique des anomalies et arrêts</td><td>Bilan, EXPORTER, Feuil*</td></tr>
               <tr><td>Référentiels</td><td>Familles, exemples, S/E, qualités, équipements</td><td>Familles arrêts, Bilan</td></tr>
+              <tr><td>Accès par rôle</td><td>Agent de quart, chef d'équipe, responsable, direction</td><td>Workflow cible TRACE-PORT</td></tr>
               <tr><td>Calculs</td><td>Durées, SUMIFS, TRS, TRG, cadence, écarts</td><td>Synthèses, Tonnage, Trains, Navire</td></tr>
-              <tr><td>Visualisation</td><td>Dashboard Poste de Commande et Pareto</td><td>Synthèses + bilans calculés</td></tr>
+              <tr><td>Visualisation</td><td>Dashboard Poste de Commande, alertes, tendances et Pareto</td><td>Synthèses + bilans calculés</td></tr>
+              <tr><td>Historisation</td><td>Création, modification, validation, rejet et suppression</td><td>Traçabilité SMQE et audits</td></tr>
               <tr><td>Export</td><td>CSV du journal et synthèse JSON</td><td>Remplacement des consolidations manuelles</td></tr>
             </tbody>
           </table>
         </div>
       </section>
+
+      <div class="two-col">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Acteurs et workflow</h2>
+            <span class="badge cyan">Validation contrôlée</span>
+          </div>
+          <div class="split-list">
+            ${roles.map(([role, body]) => `
+              <div class="list-row">
+                <div>
+                  <strong>${escapeHtml(role)}</strong>
+                  <p class="status-line">${escapeHtml(body)}</p>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Gains Lean attendus</h2>
+            <span class="badge warn">Moins de gaspillage</span>
+          </div>
+          <div class="split-list">
+            ${leanGains.map((gain) => `
+              <div class="list-row">
+                <div><strong>${escapeHtml(gain)}</strong></div>
+              </div>
+            `).join("")}
+          </div>
+        </section>
+      </div>
+
       <div class="requirement-grid">
         ${requirements.map(([title, body]) => `
           <article class="requirement">
