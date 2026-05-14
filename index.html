@@ -19,29 +19,37 @@
         <nav class="nav" aria-label="Navigation principale">
           <button class="nav-item active" data-view="dashboard" type="button"><span>⌁</span>Tableau de bord</button>
 
-          <span class="nav-section-title">Gestion des arrêts</span>
-          <button class="nav-item" data-view="entry" type="button"><span>＋</span>Nouvel arrêt</button>
-          <button class="nav-item" data-view="myStops" type="button"><span>▤</span>Mes arrêts</button>
-          <button class="nav-item" data-view="currentStops" type="button"><span>◴</span>Arrêts en cours</button>
-          <button class="nav-item" data-view="validation" type="button"><span>✓</span>Validation</button>
+          <details class="nav-group" open>
+            <summary>1. Couche opérationnelle</summary>
+            <button class="nav-item" data-view="entry" type="button"><span>＋</span>Nouvel arrêt</button>
+            <button class="nav-item" data-view="myStops" type="button"><span>▤</span>Mes arrêts</button>
+            <button class="nav-item" data-view="currentStops" type="button"><span>◴</span>Arrêts en cours</button>
+            <button class="nav-item" data-view="validation" type="button"><span>✓</span>Validation</button>
+          </details>
 
-          <span class="nav-section-title">Analyse & KPI</span>
-          <button class="nav-item" data-view="kpiDashboard" type="button"><span>▥</span>Tableaux de bord</button>
-          <button class="nav-item" data-view="indicators" type="button"><span>↯</span>Indicateurs (KPI)</button>
-          <button class="nav-item" data-view="pareto" type="button"><span>◔</span>Pareto des arrêts</button>
-          <button class="nav-item" data-view="performance" type="button"><span>⌁</span>Performance circuits</button>
+          <details class="nav-group" open>
+            <summary>2. Couche monitoring</summary>
+            <button class="nav-item" data-view="kpiDashboard" type="button"><span>▥</span>Tableaux de bord</button>
+            <button class="nav-item" data-view="indicators" type="button"><span>↯</span>Indicateurs (KPI)</button>
+            <button class="nav-item" data-view="performance" type="button"><span>⌁</span>Performance circuits</button>
+          </details>
 
-          <span class="nav-section-title">Rapports</span>
-          <button class="nav-item" data-view="dailyReports" type="button"><span>▣</span>Rapports journaliers</button>
-          <button class="nav-item" data-view="monthlyReports" type="button"><span>▦</span>Rapports mensuels</button>
-          <button class="nav-item" data-view="exportData" type="button"><span>⇩</span>Export des données</button>
+          <details class="nav-group" open>
+            <summary>3. Couche décisionnelle</summary>
+            <button class="nav-item" data-view="pareto" type="button"><span>◔</span>Pareto des arrêts</button>
+            <button class="nav-item" data-view="dailyReports" type="button"><span>▣</span>Rapports journaliers</button>
+            <button class="nav-item" data-view="monthlyReports" type="button"><span>▦</span>Rapports mensuels</button>
+            <button class="nav-item" data-view="exportData" type="button"><span>⇩</span>Export des données</button>
+          </details>
 
-          <span class="nav-section-title">Paramètres</span>
-          <button class="nav-item" data-view="equipments" type="button"><span>▧</span>Équipements</button>
-          <button class="nav-item" data-view="stopNatures" type="button"><span>◇</span>Natures d'arrêt</button>
-          <button class="nav-item" data-view="users" type="button"><span>♙</span>Utilisateurs</button>
-          <button class="nav-item" data-view="logs" type="button"><span>◎</span>Traçabilité</button>
-          <button class="nav-item" data-view="settings" type="button"><span>⚙</span>Paramètres</button>
+          <details class="nav-group" open>
+            <summary>4. Couche administration</summary>
+            <button class="nav-item" data-view="equipments" type="button"><span>▧</span>Équipements</button>
+            <button class="nav-item" data-view="stopNatures" type="button"><span>◇</span>Natures d'arrêt</button>
+            <button class="nav-item" data-view="users" type="button"><span>♙</span>Utilisateurs</button>
+            <button class="nav-item" data-view="logs" type="button"><span>◎</span>Traçabilité</button>
+            <button class="nav-item" data-view="settings" type="button"><span>⚙</span>Paramètres</button>
+          </details>
         </nav>
         <div class="sidebar-meta">
           <span id="source-month">Janvier 2026</span>
@@ -57,6 +65,13 @@
             <span class="site-label">Direction Logistique Portuaire - OCP Casablanca</span>
           </div>
           <div class="topbar-right">
+            <label class="top-search">Recherche rapide
+              <input id="global-search" type="search" placeholder="Arrêt, équipement, navire">
+            </label>
+            <label class="top-control">Période
+              <input id="global-date" type="date" value="2026-01-31">
+            </label>
+            <span class="env-status">Production simulée</span>
             <button class="icon-button" type="button" title="Notifications">⌁<span class="notification-dot">5</span></button>
             <div class="user-chip">
               <span class="avatar">IH</span>

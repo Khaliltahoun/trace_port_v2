@@ -21,9 +21,11 @@ Le fichier Excel source représente un seul mois. TRACE-PORT conserve cette logi
 
 ## Vision fonctionnelle
 
-- Sidebar complète inspirée d'une plateforme MES/ERP : gestion des arrêts, analyse KPI, rapports, paramètres et traçabilité.
+- Sidebar complète inspirée d'une plateforme MES/ERP, organisée par couches métier : opérationnel, monitoring, décisionnel et administration.
+- Bandeau de processus commun à tous les modules pour afficher la position dans le workflow, les compteurs opérationnels et la prochaine action.
 - Saisie directe des arrêts par les agents de quart.
 - Consultation de `Mes arrêts`, suivi des `Arrêts en cours`, fiche détail incident et workflow de validation/rejet.
+- Continuité opérationnelle : un arrêt créé passe dans `Mes arrêts`, arrive en `Validation`, puis alimente KPI, Pareto, rapports et logs après validation.
 - Synthèse journalière recalculée à partir des arrêts, trains, navires et tonnages du jour.
 - Synthèse mensuelle consolidant les données quotidiennes du mois.
 - Ajout des trains reçus tout au long de la journée avec wagons, tonnage, durée, retard et cadence.

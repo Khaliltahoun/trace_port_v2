@@ -38,6 +38,26 @@
     formulas: "Formules & requêtes",
     dmaic: "Besoins PFE"
   };
+  const VIEW_META = {
+    dashboard: ["Monitoring", "Vue consolidée temps réel", "Surveiller les alertes et ouvrir les arrêts critiques", "currentStops"],
+    entry: ["Opérationnel", "Déclaration d'un arrêt", "Enregistrer l'arrêt pour alimenter Mes arrêts et Validation", "myStops"],
+    myStops: ["Opérationnel", "Suivi des arrêts déclarés", "Ouvrir le détail ou suivre le statut de validation", "validation"],
+    currentStops: ["Opérationnel", "Incidents actifs et critiques", "Prioriser les arrêts longs et déclencher validation", "validation"],
+    validation: ["Opérationnel", "Contrôle chef d'équipe", "Valider ou rejeter pour recalculer les KPI", "kpiDashboard"],
+    stopDetail: ["Opérationnel", "Fiche complète d'incident", "Consulter l'historique puis valider ou corriger", "validation"],
+    kpiDashboard: ["Monitoring", "Pilotage de performance", "Analyser les écarts puis ouvrir les indicateurs", "indicators"],
+    indicators: ["Monitoring", "KPI industriels", "Comparer TRS, TRG, MTTR, MTBF et débit", "performance"],
+    performance: ["Monitoring", "Performance par circuit", "Identifier les circuits sous objectif", "pareto"],
+    pareto: ["Décisionnel", "Analyse des causes", "Prioriser les causes dominantes", "dailyReports"],
+    dailyReports: ["Décisionnel", "Rapport journalier", "Générer et diffuser la synthèse quotidienne", "monthlyReports"],
+    monthlyReports: ["Décisionnel", "Rapport mensuel", "Consolider la fiche mensuelle envoyée aux services", "exportData"],
+    exportData: ["Décisionnel", "Extraction contrôlée", "Exporter les données validées", "logs"],
+    equipments: ["Administration", "Référentiel équipements", "Maintenir les circuits et équipements", "stopNatures"],
+    stopNatures: ["Administration", "Référentiel natures d'arrêt", "Normaliser les familles de causes", "users"],
+    users: ["Administration", "Utilisateurs et rôles", "Gérer les accès RBAC", "logs"],
+    logs: ["Administration", "Audit et traçabilité", "Contrôler les actions sensibles", "settings"],
+    settings: ["Administration", "Configuration plateforme", "Piloter les paramètres système", "dashboard"]
+  };
   const CHARGING_SECTIONS = ["CA30", "CB30", "CC30", "CD30"];
   const DISCHARGE_SECTIONS = ["DA10", "DB10"];
   const USERS = [
@@ -152,6 +172,8 @@
     family: document.getElementById("filter-family"),
     quality: document.getElementById("filter-quality"),
     search: document.getElementById("filter-search"),
+    globalSearch: document.getElementById("global-search"),
+    globalDate: document.getElementById("global-date"),
     dataCount: document.getElementById("data-count")
   };
 
@@ -182,7 +204,21 @@
 
     els.search.addEventListener("input", () => {
       state.filters.search = els.search.value.trim().toLowerCase();
+      if (els.globalSearch && els.globalSearch.value !== els.search.value) {
+        els.globalSearch.value = els.search.value;
+      }
       render();
+    });
+
+    els.globalSearch?.addEventListener("input", () => {
+      state.filters.search = els.globalSearch.value.trim().toLowerCase();
+      els.search.value = els.globalSearch.value;
+      render();
+    });
+
+    els.globalDate?.addEventListener("change", () => {
+      state.dailyDate = els.globalDate.value || state.dailyDate;
+      if (state.view === "dailyReports") render();
     });
 
     document.getElementById("export-csv").addEventListener("click", exportEventsCsv);
@@ -316,6 +352,14 @@
     });
   }
 
+  function getAnalysisEvents() {
+    return getFilteredEvents().filter((event) => {
+      const decorated = decorateEvent(event);
+      if (String(event.id || "").startsWith("LOCAL-")) return decorated.status === "validated";
+      return decorated.status !== "rejected";
+    });
+  }
+
   function render() {
     const title = VIEW_TITLES[state.view] || "Tableau de bord";
     els.title.textContent = title;
@@ -348,15 +392,58 @@
       dmaic: renderDmaic
     };
     (renderers[state.view] || renderDashboard)();
+    injectProcessContext();
+  }
+
+  function injectProcessContext() {
+    const [stage, process, nextAction, nextView] = VIEW_META[state.view] || VIEW_META.dashboard;
+    const events = decorateEvents(getAllEvents());
+    const pending = events.filter((event) => event.status === "pending").length;
+    const validated = events.filter((event) => event.status === "validated").length;
+    const critical = events.filter((event) => event.status === "pending" || Number(event.durationHours) >= 2).length;
+    const nextLabel = VIEW_TITLES[nextView] || "Continuer";
+
+    els.view.insertAdjacentHTML("afterbegin", `
+      <section class="process-context">
+        <div class="process-main">
+          <span class="stage-badge">${escapeHtml(stage)}</span>
+          <div>
+            <h2>${escapeHtml(process)}</h2>
+            <p>${escapeHtml(nextAction)}</p>
+          </div>
+        </div>
+        <div class="process-flow" aria-label="Flux opérationnel">
+          ${workflowStep("Saisie", ["entry", "myStops"].includes(state.view))}
+          ${workflowStep("Validation", ["validation", "stopDetail"].includes(state.view))}
+          ${workflowStep("KPI", ["dashboard", "kpiDashboard", "indicators", "performance"].includes(state.view))}
+          ${workflowStep("Décision", ["pareto", "dailyReports", "monthlyReports", "exportData"].includes(state.view))}
+          ${workflowStep("Audit", ["equipments", "stopNatures", "users", "logs", "settings"].includes(state.view))}
+        </div>
+        <div class="process-actions">
+          <div class="ops-counters">
+            <span><strong>${fmtNumber(pending, 0)}</strong> attente</span>
+            <span><strong>${fmtNumber(validated, 0)}</strong> validés</span>
+            <span><strong>${fmtNumber(critical, 0)}</strong> critiques</span>
+          </div>
+          <button class="primary-button" type="button" data-target-view="${escapeAttr(nextView)}">${escapeHtml(nextLabel)}</button>
+        </div>
+      </section>
+    `);
+    bindQuickActions();
+  }
+
+  function workflowStep(label, active) {
+    return `<span class="workflow-step ${active ? "active" : ""}">${escapeHtml(label)}</span>`;
   }
 
   function renderDashboard() {
-    const events = getFilteredEvents();
+    const sourceEvents = getFilteredEvents();
+    const events = getAnalysisEvents();
     const metrics = computeMetrics(events);
     const pareto = topGroups(groupSum(events, "family"), 5);
     const trend = getAllDays().map(computeDaySummary).slice(-7);
-    const alerts = buildDashboardAlerts(metrics, pareto, events);
-    const currentStops = events.slice().sort((a, b) => (b.durationHours || 0) - (a.durationHours || 0)).slice(0, 3);
+    const alerts = buildDashboardAlerts(metrics, pareto, sourceEvents);
+    const currentStops = decorateEvents(sourceEvents).filter((event) => event.status === "pending" || Number(event.durationHours) >= 2).slice(0, 3);
     const circuitRows = buildCircuitPerformance(metrics);
 
     els.view.innerHTML = `
@@ -527,12 +614,12 @@
 
     document.getElementById("daily-date").addEventListener("change", (event) => {
       state.dailyDate = event.target.value;
-      renderDailySynthesis();
+      render();
     });
   }
 
   function renderMonthlySynthesis() {
-    const events = getFilteredEvents();
+    const events = getAnalysisEvents();
     const metrics = computeMetrics(events);
     const days = getAllDays();
     const dailyRows = days.map(computeDaySummary);
@@ -811,7 +898,7 @@
   }
 
   function renderKpiDashboard() {
-    const events = getFilteredEvents();
+    const events = getAnalysisEvents();
     const metrics = computeMetrics(events);
     const dailyRows = getAllDays().map(computeDaySummary).slice(-12);
 
@@ -849,7 +936,7 @@
   }
 
   function renderIndicators() {
-    const events = getFilteredEvents();
+    const events = getAnalysisEvents();
     const metrics = computeMetrics(events);
     const indicators = [
       ["TRS Global", fmtPct(metrics.trsGlobal), "Disponibilité nette après arrêts exploitation et maintenance"],
@@ -894,7 +981,7 @@
   }
 
   function renderParetoAnalysis() {
-    const events = getFilteredEvents();
+    const events = getAnalysisEvents();
     const pareto = topGroups(groupSum(events, "family"), 12);
     const total = sum(events, "durationHours");
 
@@ -927,7 +1014,7 @@
   }
 
   function renderPerformanceCircuits() {
-    const events = getFilteredEvents();
+    const events = getAnalysisEvents();
     const metrics = computeMetrics(events);
     const circuits = buildCircuitPerformance(metrics);
     const chargingRows = buildSynthesisRows(events, CHARGING_SECTIONS, metrics.chargingAvailableHours);
@@ -1967,7 +2054,7 @@
   }
 
   function downloadReport(kind, format) {
-    const events = getFilteredEvents();
+    const events = getAnalysisEvents();
     const metrics = computeMetrics(events);
     const filenameBase = `trace-port-rapport-${kind}`;
     addLog("Export rapport", filenameBase, `Génération rapport ${kind} au format ${format}.`);
@@ -2170,7 +2257,7 @@
     }
 
     const localEvents = getLocalEvents();
-    localEvents.push({
+    const newEvent = {
       id: `LOCAL-${Date.now()}`,
       row: null,
       declaredBy: CURRENT_USER.name,
@@ -2186,10 +2273,15 @@
       assignment: form.elements.assignment.value.trim(),
       quality: form.elements.quality.value,
       destination: form.elements.destination.value.trim()
-    });
+    };
+    localEvents.push(newEvent);
     saveLocalEvents(localEvents);
+    addLog("Création", newEvent.id, "Nouvel arrêt créé et envoyé automatiquement au workflow de validation.");
     populateFilters();
     form.reset();
+    state.selectedEventId = newEvent.id;
+    state.view = "myStops";
+    document.querySelectorAll(".nav-item").forEach((nav) => nav.classList.toggle("active", nav.dataset.view === "myStops"));
     render();
   }
 
@@ -2821,7 +2913,7 @@
   }
 
   function exportSummaryJson() {
-    const events = getFilteredEvents();
+    const events = getAnalysisEvents();
     const summary = {
       generatedAt: new Date().toISOString(),
       sourceWorkbook: DATA.sourceWorkbook,
