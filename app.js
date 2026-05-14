@@ -1801,12 +1801,19 @@
   function renderDonutLegend(items, total) {
     if (!items.length) return `<div class="empty-state">Aucune donnée.</div>`;
     return `
-      <div class="legend-list">
+      <div class="legend-table" role="table" aria-label="Légende du donut">
+        <div class="legend-head" role="row">
+          <span></span>
+          <span>Nature</span>
+          <span>Durée</span>
+          <span>%</span>
+        </div>
         ${items.map((item, index) => `
-          <div class="legend-row">
+          <div class="legend-row" title="${escapeAttr(item.label)} - ${fmtHours(item.value)} - ${fmtPct(item.value / Math.max(total, 1))}" role="row">
             <span class="legend-dot" style="background:${chartColor(index)}"></span>
-            <strong>${escapeHtml(item.label)}</strong>
-            <span>${fmtHours(item.value)} (${fmtPct(item.value / Math.max(total, 1))})</span>
+            <strong>${escapeHtml(truncate(item.label, 24))}</strong>
+            <span class="legend-value">${fmtHours(item.value)}</span>
+            <span class="legend-percent">${fmtPct(item.value / Math.max(total, 1))}</span>
           </div>
         `).join("")}
       </div>
@@ -2646,6 +2653,64 @@
     return ["#dc2626", "#f97316", "#facc15", "#2563eb", "#20b970", "#7c5ce6", "#12a39b"][index % 7];
   }
 
+  function animateChart(draw, duration = 500) {
+    const start = performance.now();
+    const step = (now) => {
+      const progress = Math.min(1, (now - start) / duration);
+      draw(progress);
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  function easeOutCubic(value) {
+    return 1 - Math.pow(1 - value, 3);
+  }
+
+  function getChartTooltip() {
+    let tooltip = document.querySelector(".chart-tooltip");
+    if (!tooltip) {
+      tooltip = document.createElement("div");
+      tooltip.className = "chart-tooltip";
+      document.body.appendChild(tooltip);
+    }
+    return tooltip;
+  }
+
+  function bindDonutTooltip(canvas) {
+    if (canvas.__tooltipBound) return;
+    canvas.__tooltipBound = true;
+    canvas.addEventListener("mousemove", (event) => {
+      const meta = canvas.__chartCenter;
+      const segments = canvas.__chartSegments || [];
+      if (!meta || !segments.length) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const dx = x - meta.cx;
+      const dy = y - meta.cy;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      let angle = Math.atan2(dy, dx);
+      if (angle < -Math.PI / 2) angle += Math.PI * 2;
+      const segment = segments.find((item) => distance >= meta.innerRadius && distance <= meta.outerRadius && angle >= item.start && angle <= item.end);
+      const tooltip = getChartTooltip();
+      if (!segment) {
+        tooltip.classList.remove("visible");
+        return;
+      }
+      tooltip.innerHTML = `
+        <strong>${escapeHtml(segment.label)}</strong>
+        <span>${fmtHours(segment.value)} · ${fmtPct(segment.value / Math.max(meta.total, 1))}</span>
+      `;
+      tooltip.style.left = `${event.clientX + 14}px`;
+      tooltip.style.top = `${event.clientY + 14}px`;
+      tooltip.classList.add("visible");
+    });
+    canvas.addEventListener("mouseleave", () => {
+      getChartTooltip().classList.remove("visible");
+    });
+  }
+
   function drawGauge(id, value, label) {
     const canvas = document.getElementById(id);
     if (!canvas) return;
@@ -2687,32 +2752,49 @@
     const h = canvas.height / pixelRatio();
     const cx = w / 2;
     const cy = h / 2;
-    const radius = Math.min(w, h) * 0.36;
-    let start = -Math.PI / 2;
+    const radius = Math.min(w, h) * 0.34;
+    const ringWidth = Math.max(28, radius * 0.34);
+    const gap = 0.018;
+    const segments = [];
 
-    ctx.clearRect(0, 0, w, h);
-    data.forEach((item, index) => {
-      const angle = (item.value / Math.max(total, 1)) * Math.PI * 2;
+    const renderFrame = (progress) => {
+      let start = -Math.PI / 2;
+      segments.length = 0;
+      ctx.clearRect(0, 0, w, h);
       ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, radius, start, start + angle);
-      ctx.closePath();
-      ctx.fillStyle = chartColor(index);
-      ctx.fill();
-      start += angle;
-    });
-    ctx.globalCompositeOperation = "destination-out";
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius * 0.52, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = "#10284b";
-    ctx.font = "700 15px Segoe UI";
-    ctx.textAlign = "center";
-    ctx.fillText("Top 5", cx, cy - 4);
-    ctx.fillStyle = "#64748b";
-    ctx.font = "12px Segoe UI";
-    ctx.fillText("arrêts", cx, cy + 14);
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = "#eef3f8";
+      ctx.lineWidth = ringWidth;
+      ctx.stroke();
+
+      data.forEach((item, index) => {
+        const rawAngle = (item.value / Math.max(total, 1)) * Math.PI * 2;
+        const angle = rawAngle * progress;
+        const end = start + Math.max(0, angle - gap);
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, start, end);
+        ctx.strokeStyle = chartColor(index);
+        ctx.lineWidth = ringWidth;
+        ctx.lineCap = "butt";
+        ctx.stroke();
+        segments.push({ ...item, color: chartColor(index), start, end: start + rawAngle });
+        start += rawAngle;
+      });
+
+      ctx.fillStyle = "#10284b";
+      ctx.font = "800 16px Segoe UI";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("Top 5", cx, cy - 8);
+      ctx.fillStyle = "#64748b";
+      ctx.font = "12px Segoe UI";
+      ctx.fillText("arrêts", cx, cy + 12);
+    };
+
+    animateChart((progress) => renderFrame(easeOutCubic(progress)), 650);
+    canvas.__chartSegments = segments;
+    canvas.__chartCenter = { cx, cy, radius, innerRadius: radius - ringWidth / 2, outerRadius: radius + ringWidth / 2, total };
+    bindDonutTooltip(canvas);
   }
 
   function drawDailyTrend(id, rows) {
@@ -2762,92 +2844,122 @@
     const ctx = setupCanvas(canvas);
     const w = canvas.width / pixelRatio();
     const h = canvas.height / pixelRatio();
-    const pad = { left: 38, right: 18, top: 18, bottom: 46 };
+    const pad = { left: 42, right: 24, top: 32, bottom: 54 };
     const plotW = w - pad.left - pad.right;
     const plotH = h - pad.top - pad.bottom;
 
-    ctx.clearRect(0, 0, w, h);
-    drawAxis(ctx, pad, w, h);
-    rows.forEach((row, index) => {
-      const x = pad.left + (index * plotW) / rows.length + 12;
-      const barW = Math.max(28, plotW / rows.length - 24);
-      const barH = Math.max(2, row.value * plotH);
-      ctx.fillStyle = chartColor(index + 4);
-      ctx.fillRect(x, pad.top + plotH - barH, barW, barH);
-      ctx.fillStyle = "#10284b";
-      ctx.font = "700 12px Segoe UI";
-      ctx.textAlign = "center";
-      ctx.fillText(fmtPct(row.value), x + barW / 2, pad.top + plotH - barH - 8);
-      ctx.fillStyle = "#475569";
-      ctx.font = "11px Segoe UI";
-      ctx.fillText(row.label, x + barW / 2, h - 16);
-    });
+    animateChart((progress) => {
+      ctx.clearRect(0, 0, w, h);
+      drawAxis(ctx, pad, w, h);
+      rows.forEach((row, index) => {
+        const slot = plotW / rows.length;
+        const barW = Math.min(58, Math.max(32, slot * 0.46));
+        const x = pad.left + index * slot + (slot - barW) / 2;
+        const barH = Math.max(2, row.value * plotH * easeOutCubic(progress));
+        const y = pad.top + plotH - barH;
+        ctx.fillStyle = chartColor(index + 4);
+        ctx.fillRect(x, y, barW, barH);
+        ctx.fillStyle = "#10284b";
+        ctx.font = "800 12px Segoe UI";
+        ctx.textAlign = "center";
+        ctx.fillText(fmtPct(row.value), x + barW / 2, Math.max(14, y - 8));
+        ctx.fillStyle = "#475569";
+        ctx.font = "12px Segoe UI";
+        ctx.fillText(truncate(row.label, 14), x + barW / 2, h - 18);
+      });
+    }, 520);
   }
 
   function drawPareto(id, data, total) {
     const canvas = document.getElementById(id);
-    if (!canvas) return;
+    if (!canvas || !data.length) return;
     const ctx = setupCanvas(canvas);
     const w = canvas.width / pixelRatio();
     const h = canvas.height / pixelRatio();
-    const pad = { left: 48, right: 24, top: 18, bottom: 72 };
+    const pad = { left: 54, right: 54, top: 34, bottom: 64 };
     const plotW = w - pad.left - pad.right;
     const plotH = h - pad.top - pad.bottom;
     const max = Math.max(...data.map((d) => d.value), 1);
-    let cumulative = 0;
+    const labelStep = plotW / Math.max(data.length, 1) < 58 ? 2 : 1;
 
-    ctx.clearRect(0, 0, w, h);
-    drawAxis(ctx, pad, w, h);
-    data.forEach((item, i) => {
-      const x = pad.left + (i * plotW) / data.length + 8;
-      const barW = Math.max(12, plotW / data.length - 14);
-      const barH = (item.value / max) * plotH;
-      ctx.fillStyle = i < 4 ? "#0f766e" : "#7a8d85";
-      ctx.fillRect(x, pad.top + plotH - barH, barW, barH);
-      ctx.fillStyle = "#3d4641";
+    animateChart((progress) => {
+      let cumulative = 0;
+      const points = [];
+      ctx.clearRect(0, 0, w, h);
+      drawAxis(ctx, pad, w, h);
+      data.forEach((item, i) => {
+        const slot = plotW / data.length;
+        const barW = Math.max(14, Math.min(42, slot * 0.54));
+        const x = pad.left + i * slot + (slot - barW) / 2;
+        const barH = (item.value / max) * plotH * easeOutCubic(progress);
+        const y = pad.top + plotH - barH;
+        ctx.fillStyle = i < 5 ? chartColor(i) : "#94a3b8";
+        ctx.fillRect(x, y, barW, barH);
+        cumulative += item.value;
+        points.push({
+          x: x + barW / 2,
+          y: pad.top + plotH - (total ? (cumulative / total) * progress : 0) * plotH
+        });
+        if (i % labelStep === 0) {
+          ctx.fillStyle = "#475569";
+          ctx.font = "11px Segoe UI";
+          ctx.textAlign = "center";
+          ctx.fillText(truncate(item.label, labelStep > 1 ? 8 : 11), x + barW / 2, h - 30);
+        }
+      });
+      ctx.beginPath();
+      points.forEach((point, index) => {
+        if (index === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.strokeStyle = "#f97316";
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      points.forEach((point) => {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.strokeStyle = "#f97316";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      });
+      ctx.fillStyle = "#64748b";
       ctx.font = "11px Segoe UI";
-      ctx.save();
-      ctx.translate(x + 4, h - pad.bottom + 12);
-      ctx.rotate(-Math.PI / 4);
-      ctx.fillText(truncate(item.label, 18), 0, 0);
-      ctx.restore();
-      cumulative += item.value;
-      const cx = x + barW / 2;
-      const cy = pad.top + plotH - (total ? cumulative / total : 0) * plotH;
-      if (i === 0) ctx.beginPath();
-      ctx.lineTo(cx, cy);
-    });
-    ctx.strokeStyle = "#b66a0a";
-    ctx.lineWidth = 2;
-    ctx.stroke();
+      ctx.textAlign = "right";
+      ctx.fillText("% cumulé", w - pad.right, pad.top - 12);
+    }, 560);
   }
 
   function drawBars(id, data, options = {}) {
     const canvas = document.getElementById(id);
-    if (!canvas) return;
+    if (!canvas || !data.length) return;
     const ctx = setupCanvas(canvas);
     const w = canvas.width / pixelRatio();
     const h = canvas.height / pixelRatio();
-    const pad = { left: 46, right: 18, top: 18, bottom: 68 };
+    const pad = { left: 48, right: 24, top: 28, bottom: 60 };
     const plotW = w - pad.left - pad.right;
     const plotH = h - pad.top - pad.bottom;
     const max = Math.max(...data.map((d) => d.value), 1);
-    ctx.clearRect(0, 0, w, h);
-    drawAxis(ctx, pad, w, h);
-    data.forEach((item, i) => {
-      const x = pad.left + (i * plotW) / data.length + 5;
-      const barW = Math.max(7, plotW / data.length - 10);
-      const barH = (item.value / max) * plotH;
-      ctx.fillStyle = options.color || "#0f766e";
-      ctx.fillRect(x, pad.top + plotH - barH, barW, barH);
-      ctx.fillStyle = "#3d4641";
-      ctx.font = "11px Segoe UI";
-      ctx.save();
-      ctx.translate(x, h - pad.bottom + 14);
-      ctx.rotate(-Math.PI / 4);
-      ctx.fillText(truncate(item.label, 14), 0, 0);
-      ctx.restore();
-    });
+    const labelStep = plotW / Math.max(data.length, 1) < 46 ? Math.ceil(46 / (plotW / Math.max(data.length, 1))) : 1;
+    animateChart((progress) => {
+      ctx.clearRect(0, 0, w, h);
+      drawAxis(ctx, pad, w, h);
+      data.forEach((item, i) => {
+        const slot = plotW / data.length;
+        const barW = Math.max(8, Math.min(38, slot * 0.58));
+        const x = pad.left + i * slot + (slot - barW) / 2;
+        const barH = (item.value / max) * plotH * easeOutCubic(progress);
+        ctx.fillStyle = options.color || "#0f766e";
+        ctx.fillRect(x, pad.top + plotH - barH, barW, barH);
+        if (i % labelStep === 0) {
+          ctx.fillStyle = "#475569";
+          ctx.font = "11px Segoe UI";
+          ctx.textAlign = "center";
+          ctx.fillText(truncate(item.label, 10), x + barW / 2, h - 26);
+        }
+      });
+    }, 520);
   }
 
   function drawLineBars(id, rows) {
