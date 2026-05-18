@@ -611,15 +611,16 @@ textarea {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 18px;
+  padding: 20px;
   box-shadow: var(--shadow);
   min-width: 0;
-  transition: box-shadow 160ms ease, border-color 160ms ease;
+  transition: box-shadow 160ms ease, border-color 160ms ease, transform 160ms ease;
 }
 
 .panel:hover {
   border-color: #cbd5e1;
   box-shadow: var(--shadow-strong);
+  transform: translateY(-1px);
 }
 
 .panel-head {
@@ -660,6 +661,10 @@ textarea {
   display: block;
   opacity: 0;
   animation: chartFadeIn 260ms ease forwards;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.72), rgba(255, 255, 255, 0.96));
+  cursor: crosshair;
 }
 
 .mini-chart {
@@ -668,6 +673,10 @@ textarea {
   display: block;
   opacity: 0;
   animation: chartFadeIn 260ms ease forwards;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.66), rgba(255, 255, 255, 0.96));
+  cursor: crosshair;
 }
 
 .donut-layout {
@@ -761,6 +770,15 @@ textarea {
   transform: translateY(4px);
   transition: opacity 120ms ease, transform 120ms ease;
   z-index: 1000;
+  max-width: 260px;
+}
+
+.chart-tooltip strong {
+  font-size: 13px;
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chart-tooltip.visible {
@@ -853,15 +871,44 @@ tbody tr:hover {
 
 .list-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(86px, auto);
+  gap: 16px;
   align-items: center;
-  padding: 10px 0;
+  padding: 11px 0;
   border-bottom: 1px solid var(--line);
 }
 
 .list-row:last-child {
   border-bottom: 0;
+}
+
+.list-row > div {
+  min-width: 0;
+}
+
+.list-row strong {
+  display: block;
+  color: #10284b;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-row > span {
+  color: #10284b;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.list-row small {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  margin-top: 2px;
 }
 
 .bar-track {
@@ -870,11 +917,72 @@ tbody tr:hover {
   border-radius: 999px;
   overflow: hidden;
   margin-top: 7px;
+  position: relative;
 }
 
 .bar-fill {
   height: 100%;
-  background: var(--teal);
+  background: linear-gradient(90deg, var(--teal), #20b970);
+  border-radius: inherit;
+  transition: width 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.heatmap {
+  display: grid;
+  grid-template-columns: minmax(138px, 0.9fr) repeat(var(--heatmap-cols), minmax(72px, 1fr));
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 2px 2px;
+}
+
+.heatmap-day,
+.heatmap-label,
+.heatmap-cell {
+  align-items: center;
+  border-radius: 8px;
+  display: flex;
+  min-height: 42px;
+}
+
+.heatmap-day {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  justify-content: center;
+  text-transform: uppercase;
+}
+
+.heatmap-label {
+  color: #10284b;
+  font-size: 13px;
+  font-weight: 900;
+  min-width: 0;
+  overflow: hidden;
+  padding-right: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.heatmap-cell {
+  background: rgba(220, 38, 38, var(--heat));
+  border: 1px solid rgba(220, 38, 38, 0.12);
+  color: #10284b;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  justify-content: center;
+  padding: 0 8px;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+  white-space: nowrap;
+}
+
+.heatmap-cell.hot {
+  color: #ffffff;
+}
+
+.heatmap-cell:hover {
+  box-shadow: 0 12px 22px rgba(15, 23, 42, 0.14);
+  transform: translateY(-1px);
 }
 
 .alert-list {
