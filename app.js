@@ -7,57 +7,80 @@
   const SHIPS_KEY = "trace-port-digital-ships-v1";
   const VALIDATIONS_KEY = "trace-port-validations-v1";
   const LOGS_KEY = "trace-port-logs-v1";
-  const CURRENT_USER = {
-    name: "El Houdzi Israa",
-    role: "Administrateur",
-    team: "Direction Logistique Portuaire"
+  const PROFILE_KEY = "trace-port-active-profile-v1";
+
+  const PROFILES = [
+    { id: "responsable", name: "El Houdzi Israa", role: "Responsable DLP", initials: "EH", scope: "Vue consolidée toutes couches", defaultView: "dashboard", color: "#0b315f" },
+    { id: "superviseur", name: "Khadija Saidi", role: "Superviseur Maintenance", initials: "KS", scope: "Pilotage KPI, performance, alertes critiques", defaultView: "dashboard", color: "#7c5ce6" },
+    { id: "chef", name: "Youssef El Amrani", role: "Chef d'équipe Exploitation", initials: "YE", scope: "Validation des arrêts et coordination quart", defaultView: "validation", color: "#0f766e" },
+    { id: "agent", name: "Ahmed Benali", role: "Agent de quart", initials: "AB", scope: "Saisie des arrêts et suivi de ses incidents", defaultView: "entry", color: "#1d4ed8" },
+    { id: "admin", name: "Omar Lahbabi", role: "Administrateur Système", initials: "OL", scope: "Référentiels, RBAC, configuration et audit", defaultView: "logs", color: "#dc2626" }
+  ];
+
+  const ROLE_PERMISSIONS = {
+    Responsable: { canValidate: false, canCreate: false, focus: "executive" },
+    "Superviseur Maintenance": { canValidate: true, canCreate: false, focus: "performance" },
+    "Chef d'équipe Exploitation": { canValidate: true, canCreate: true, focus: "validation" },
+    "Agent de quart": { canValidate: false, canCreate: true, focus: "execution" },
+    "Administrateur Système": { canValidate: true, canCreate: true, focus: "governance" }
   };
+
+  const COST_PER_STOP_HOUR_EUR = 3850;
+  const TRS_TARGET = 0.85;
+  const TRS_MAINT_TARGET = 0.80;
+
   const VIEW_TITLES = {
-    dashboard: "Tableau de bord",
-    entry: "Nouvel arrêt",
+    dashboard: "Centre de commandement",
+    entry: "Déclaration d'arrêt",
     myStops: "Mes arrêts",
     currentStops: "Arrêts en cours",
-    validation: "Validation",
-    kpiDashboard: "Tableaux de bord",
-    indicators: "Indicateurs (KPI)",
-    pareto: "Pareto des arrêts",
+    validation: "File de validation",
+    pareto: "Analyse Pareto",
     performance: "Performance circuits",
-    dailyReports: "Rapports journaliers",
-    monthlyReports: "Rapports mensuels",
-    exportData: "Export des données",
-    equipments: "Équipements",
+    reporting: "Reporting & exports",
+    equipments: "Équipements & circuits",
     stopNatures: "Natures d'arrêt",
-    users: "Utilisateurs",
-    settings: "Paramètres",
-    logs: "Traçabilité (logs)",
+    users: "Utilisateurs & rôles",
+    settings: "Paramètres plateforme",
+    logs: "Traçabilité opérationnelle",
+    stopDetail: "Fiche incident",
     daily: "Synthèse journalière",
     monthly: "Synthèse mensuelle",
-    events: "Bilan des arrêts",
+    events: "Journal des arrêts",
     tonnage: "Tonnage",
     flow: "Trains & navires",
     formulas: "Formules & requêtes",
     dmaic: "Besoins PFE"
   };
-  const VIEW_META = {
-    dashboard: ["Monitoring", "Vue consolidée temps réel", "Surveiller les alertes et ouvrir les arrêts critiques", "currentStops"],
-    entry: ["Opérationnel", "Déclaration d'un arrêt", "Enregistrer l'arrêt pour alimenter Mes arrêts et Validation", "myStops"],
-    myStops: ["Opérationnel", "Suivi des arrêts déclarés", "Ouvrir le détail ou suivre le statut de validation", "validation"],
-    currentStops: ["Opérationnel", "Incidents actifs et critiques", "Prioriser les arrêts longs et déclencher validation", "validation"],
-    validation: ["Opérationnel", "Contrôle chef d'équipe", "Valider ou rejeter pour recalculer les KPI", "kpiDashboard"],
-    stopDetail: ["Opérationnel", "Fiche complète d'incident", "Consulter l'historique puis valider ou corriger", "validation"],
-    kpiDashboard: ["Monitoring", "Pilotage de performance", "Analyser les écarts puis ouvrir les indicateurs", "indicators"],
-    indicators: ["Monitoring", "KPI industriels", "Comparer TRS, TRG, MTTR, MTBF et débit", "performance"],
-    performance: ["Monitoring", "Performance par circuit", "Identifier les circuits sous objectif", "pareto"],
-    pareto: ["Décisionnel", "Analyse des causes", "Prioriser les causes dominantes", "dailyReports"],
-    dailyReports: ["Décisionnel", "Rapport journalier", "Générer et diffuser la synthèse quotidienne", "monthlyReports"],
-    monthlyReports: ["Décisionnel", "Rapport mensuel", "Consolider la fiche mensuelle envoyée aux services", "exportData"],
-    exportData: ["Décisionnel", "Extraction contrôlée", "Exporter les données validées", "logs"],
-    equipments: ["Administration", "Référentiel équipements", "Maintenir les circuits et équipements", "stopNatures"],
-    stopNatures: ["Administration", "Référentiel natures d'arrêt", "Normaliser les familles de causes", "users"],
-    users: ["Administration", "Utilisateurs et rôles", "Gérer les accès RBAC", "logs"],
-    logs: ["Administration", "Audit et traçabilité", "Contrôler les actions sensibles", "settings"],
-    settings: ["Administration", "Configuration plateforme", "Piloter les paramètres système", "dashboard"]
+
+  const VIEW_ALIASES = {
+    kpiDashboard: "dashboard",
+    indicators: "dashboard",
+    dailyReports: "reporting",
+    monthlyReports: "reporting",
+    exportData: "reporting"
   };
+
+  const VIEW_META = {
+    dashboard: ["Pilotage", "Centre de commandement temps réel", "Surveiller les KPI, alertes critiques et indicateurs Smart Port", "currentStops"],
+    entry: ["Exécution", "Saisie d'incident terrain", "Capturer l'arrêt et déclencher le workflow de validation", "myStops"],
+    myStops: ["Exécution", "Suivi de mes arrêts", "Consulter le statut et corriger les arrêts rejetés", "validation"],
+    currentStops: ["Exécution", "Incidents actifs et critiques", "Prioriser les arrêts longs et déclencher la validation", "validation"],
+    validation: ["Exécution", "Contrôle qualité Chef d'équipe", "Valider ou rejeter pour fiabiliser les KPI", "dashboard"],
+    stopDetail: ["Exécution", "Fiche complète d'incident", "Consulter l'historique puis valider ou corriger", "validation"],
+    performance: ["Pilotage", "Performance des circuits manutention", "Identifier les circuits sous objectif", "pareto"],
+    pareto: ["Pilotage", "Diagnostic des causes racines", "Prioriser les leviers d'amélioration", "reporting"],
+    reporting: ["Reporting", "Diffusion & extractions contrôlées", "Générer la liasse opérationnelle attendue par les services", "logs"],
+    equipments: ["Gouvernance", "Référentiel équipements & circuits", "Maintenir la cartographie industrielle", "stopNatures"],
+    stopNatures: ["Gouvernance", "Référentiel natures d'arrêt", "Normaliser les familles de causes", "users"],
+    users: ["Gouvernance", "Utilisateurs & RBAC", "Gérer les rôles et permissions", "logs"],
+    logs: ["Gouvernance", "Audit & traçabilité", "Contrôler les actions sensibles", "settings"],
+    settings: ["Gouvernance", "Configuration plateforme", "Piloter les paramètres système", "dashboard"]
+  };
+
+  const VIEWS_WITH_FILTERS = new Set(["dashboard", "myStops", "currentStops", "validation", "pareto", "performance", "events"]);
+  const VIEWS_WITH_EXPORTS = new Set(["dashboard", "myStops", "currentStops", "validation", "pareto", "performance", "events", "reporting"]);
+  const VIEWS_WITH_PERIOD = new Set(["dashboard", "reporting", "pareto", "performance"]);
   const CHARGING_SECTIONS = ["CA30", "CB30", "CC30", "CD30"];
   const DISCHARGE_SECTIONS = ["DA10", "DB10"];
   const USERS = [
@@ -154,6 +177,7 @@
   const PAGE_SIZE = 20;
   const state = {
     view: "dashboard",
+    profile: loadProfile(),
     filters: {
       section: "all",
       family: "all",
@@ -164,6 +188,8 @@
     selectedEventId: null,
     formulaSearch: "",
     formulaSheet: "all",
+    reportingPeriod: "daily",
+    lastSync: new Date(),
     pagination: {
       myStops: 1,
       currentStops: 1,
@@ -176,13 +202,53 @@
     }
   };
 
+  function loadProfile() {
+    try {
+      const stored = localStorage.getItem(PROFILE_KEY);
+      if (stored) {
+        const found = PROFILES.find((p) => p.id === stored);
+        if (found) return found;
+      }
+    } catch {}
+    return PROFILES[0];
+  }
+
+  function saveProfile(id) {
+    try { localStorage.setItem(PROFILE_KEY, id); } catch {}
+  }
+
+  function currentUser() {
+    return state.profile;
+  }
+
+  function currentRolePermissions() {
+    return ROLE_PERMISSIONS[state.profile.role] || {};
+  }
+
   const WORKFLOW_STEPS = [
     { key: "Saisie", target: "entry", views: ["entry", "myStops"] },
     { key: "Validation", target: "validation", views: ["validation", "stopDetail"] },
-    { key: "KPI", target: "kpiDashboard", views: ["dashboard", "kpiDashboard", "indicators", "performance"] },
-    { key: "Décision", target: "pareto", views: ["pareto", "dailyReports", "monthlyReports", "exportData"] },
-    { key: "Audit", target: "logs", views: ["equipments", "stopNatures", "users", "logs", "settings"] }
+    { key: "Pilotage", target: "dashboard", views: ["dashboard", "performance"] },
+    { key: "Analyse", target: "pareto", views: ["pareto"] },
+    { key: "Reporting", target: "reporting", views: ["reporting"] },
+    { key: "Gouvernance", target: "logs", views: ["equipments", "stopNatures", "users", "logs", "settings"] }
   ];
+
+  const NAV_ICONS = {
+    command: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h6V3H3v10Zm0 8h6v-6H3v6Zm8 0h10V11H11v10Zm0-18v6h10V3H11Z" fill="currentColor"/></svg>',
+    gauge: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 0 0-8 8h2a6 6 0 0 1 12 0h2a8 8 0 0 0-8-8Zm0 3v5l3.5 3.5 1.4-1.4L13 11.2V7h-1Z" fill="currentColor"/></svg>',
+    pareto: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V4h2v16H4Zm4 0V10h2v10H8Zm4 0V13h2v7h-2Zm4 0V8h2v12h-2Zm4 0V5h0V4h-2v16h2Z" fill="currentColor"/></svg>',
+    add: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5v6H5v2h6v6h2v-6h6v-2h-6V5h-2Z" fill="currentColor"/></svg>',
+    list: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h16v2H4v-2Z" fill="currentColor"/></svg>',
+    live: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12Zm0 9a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z" fill="currentColor"/></svg>',
+    check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19l12-12-1.4-1.4Z" fill="currentColor"/></svg>',
+    report: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm-1 7V3.5L18.5 9H13Z" fill="currentColor"/></svg>',
+    hub: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a3 3 0 0 1 3 3 3 3 0 0 1-1.5 2.6V11h2.5a3 3 0 0 1 3 3 3 3 0 0 1-2.6 3H14v2.5a3 3 0 1 1-4 0V17H7.6A3 3 0 0 1 5 14a3 3 0 0 1 3-3h2.5V9.6A3 3 0 0 1 9 7a3 3 0 0 1 3-3Z" fill="currentColor"/></svg>',
+    layers: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 1 9l11 6 11-6-11-6Zm0 9L3 7v2l9 5 9-5V7l-9 5Zm0 4L3 11v2l9 5 9-5v-2l-9 5Z" fill="currentColor"/></svg>',
+    users: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-3 0-9 1.5-9 4.5V21h18v-2.5C18 15.5 12 14 9 14Zm9.5-1c2 0 5.5 1 5.5 3v2h-5v-2c0-1.5-.5-2.4-1.5-3.4.3-.4.6-.4 1-.6Zm-.5-3a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" fill="currentColor"/></svg>',
+    audit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm-2 6h-4V7h4v2Zm0 4h-4v-2h4v2Zm0 4h-4v-2h4v2ZM7 7h4v10H7V7Z" fill="currentColor"/></svg>',
+    settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 12.9a7 7 0 0 0 0-1.8l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.5-.9L15 4h-4l-.5 2.2c-.5.2-1 .5-1.5.9l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 1.8l-2 1.5 2 3.5 2.4-1c.5.4 1 .7 1.5.9L11 20h4l.5-2.2c.5-.2 1-.5 1.5-.9l2.4 1 2-3.5-2-1.5ZM13 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z" fill="currentColor"/></svg>'
+  };
 
   const els = {
     view: document.getElementById("view"),
@@ -193,14 +259,41 @@
     search: document.getElementById("filter-search"),
     globalSearch: document.getElementById("global-search"),
     globalDate: document.getElementById("global-date"),
-    dataCount: document.getElementById("data-count")
+    dataCount: document.getElementById("data-count"),
+    filtersToolbar: document.getElementById("filters-toolbar"),
+    notificationCount: document.getElementById("notification-count"),
+    notificationButton: document.getElementById("notification-button"),
+    refreshButton: document.getElementById("refresh-button"),
+    shiftName: document.getElementById("shift-name"),
+    syncTime: document.getElementById("sync-time"),
+    userAvatar: document.getElementById("user-avatar"),
+    userName: document.getElementById("user-name"),
+    userRole: document.getElementById("user-role"),
+    userToggle: document.getElementById("user-toggle"),
+    userMenu: document.getElementById("user-menu"),
+    userChip: document.getElementById("user-chip")
   };
 
   function init() {
-    els.dataCount.textContent = `${DATA.events.length} lignes Bilan, ${DATA.formulasCount} formules`;
+    els.dataCount.textContent = `${DATA.events.length} lignes Bilan`;
+    state.view = currentUser().defaultView || "dashboard";
+    paintNavIcons();
     populateFilters();
     bindShell();
+    bindShellShortcuts();
+    paintShift();
+    paintProfile();
+    setInterval(paintShift, 60000);
     render();
+  }
+
+  function paintNavIcons() {
+    document.querySelectorAll(".nav-item").forEach((button) => {
+      const icon = button.dataset.icon;
+      if (!icon || button.querySelector(".nav-icon")) return;
+      const svg = NAV_ICONS[icon] || "";
+      button.insertAdjacentHTML("afterbegin", `<span class="nav-icon" aria-hidden="true">${svg}</span>`);
+    });
   }
 
   function bindShell() {
@@ -245,11 +338,141 @@
 
     els.globalDate?.addEventListener("change", () => {
       state.dailyDate = els.globalDate.value || state.dailyDate;
-      if (state.view === "dailyReports") render();
+      if (state.view === "reporting" || state.view === "dashboard") render();
     });
 
     document.getElementById("export-csv").addEventListener("click", exportEventsCsv);
     document.getElementById("export-json").addEventListener("click", exportSummaryJson);
+  }
+
+  function bindShellShortcuts() {
+    els.refreshButton?.addEventListener("click", () => {
+      state.lastSync = new Date();
+      paintShift();
+      render();
+    });
+
+    els.notificationButton?.addEventListener("click", () => {
+      state.view = "validation";
+      resetPagination();
+      syncNavActiveState();
+      render();
+    });
+
+    els.userToggle?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleProfileMenu();
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!els.userChip?.contains(event.target)) closeProfileMenu();
+    });
+  }
+
+  function toggleProfileMenu(force) {
+    const menu = els.userMenu;
+    if (!menu) return;
+    const open = force !== undefined ? force : menu.hasAttribute("hidden");
+    if (open) {
+      menu.innerHTML = PROFILES.map((profile) => `
+        <button type="button" role="menuitem" class="user-menu-item ${profile.id === state.profile.id ? "is-active" : ""}" data-profile="${escapeAttr(profile.id)}">
+          <span class="user-menu-avatar" style="background:${profile.color}">${escapeHtml(profile.initials)}</span>
+          <span class="user-menu-text">
+            <strong>${escapeHtml(profile.name)}</strong>
+            <span>${escapeHtml(profile.role)}</span>
+            <em>${escapeHtml(profile.scope)}</em>
+          </span>
+        </button>
+      `).join("");
+      menu.removeAttribute("hidden");
+      els.userToggle?.setAttribute("aria-expanded", "true");
+      menu.querySelectorAll("[data-profile]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          switchProfile(btn.dataset.profile);
+        });
+      });
+    } else {
+      menu.setAttribute("hidden", "");
+      els.userToggle?.setAttribute("aria-expanded", "false");
+    }
+  }
+
+  function closeProfileMenu() {
+    toggleProfileMenu(false);
+  }
+
+  function switchProfile(id) {
+    const profile = PROFILES.find((p) => p.id === id);
+    if (!profile) return;
+    state.profile = profile;
+    saveProfile(id);
+    state.view = profile.defaultView || "dashboard";
+    resetPagination();
+    paintProfile();
+    syncNavActiveState();
+    closeProfileMenu();
+    addLog("Profil", profile.id, `Changement de profil actif → ${profile.role}.`);
+    render();
+  }
+
+  function paintProfile() {
+    const profile = currentUser();
+    if (els.userName) els.userName.textContent = profile.name;
+    if (els.userRole) els.userRole.textContent = profile.role;
+    if (els.userAvatar) {
+      els.userAvatar.textContent = profile.initials;
+      els.userAvatar.style.background = profile.color;
+    }
+  }
+
+  function paintShift() {
+    if (!els.shiftName) return;
+    const shift = currentShift();
+    els.shiftName.textContent = shift.label;
+    els.shiftName.dataset.tone = shift.tone;
+    if (els.syncTime) {
+      els.syncTime.textContent = relativeTimeFrom(state.lastSync);
+    }
+  }
+
+  function currentShift() {
+    const hour = new Date().getHours();
+    if (hour >= 6 && hour < 14) return { label: "Quart matin · 06h-14h", tone: "morning", team: "Equipe A" };
+    if (hour >= 14 && hour < 22) return { label: "Quart après-midi · 14h-22h", tone: "afternoon", team: "Equipe B" };
+    return { label: "Quart nuit · 22h-06h", tone: "night", team: "Equipe C" };
+  }
+
+  function relativeTimeFrom(date) {
+    if (!date) return "—";
+    const diff = Date.now() - new Date(date).getTime();
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return "à l'instant";
+    if (minutes < 60) return `il y a ${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `il y a ${hours} h`;
+    return new Date(date).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  }
+
+  function updateNotificationBadge() {
+    if (!els.notificationCount) return;
+    const pending = decorateEvents(getAllEvents()).filter((event) => event.status === "pending").length;
+    els.notificationCount.textContent = pending > 99 ? "99+" : String(pending);
+    els.notificationCount.classList.toggle("is-hidden", pending === 0);
+    els.notificationButton?.setAttribute("title", `${pending} arrêt${pending > 1 ? "s" : ""} en attente de validation`);
+  }
+
+  function updateFiltersVisibility() {
+    if (!els.filtersToolbar) return;
+    const showFilters = VIEWS_WITH_FILTERS.has(state.view);
+    const showPeriod = VIEWS_WITH_PERIOD.has(state.view);
+    els.filtersToolbar.classList.toggle("is-compact", !showFilters);
+    els.filtersToolbar.classList.toggle("is-hidden", !showFilters && !showPeriod && state.view !== "reporting");
+    document.querySelectorAll("#filters-toolbar > label").forEach((label) => {
+      const isPeriod = label.classList.contains("top-control");
+      label.style.display = isPeriod ? (showPeriod ? "" : "none") : (showFilters ? "" : "none");
+    });
+    const actions = els.filtersToolbar.querySelector(".actions");
+    if (actions) actions.style.display = VIEWS_WITH_EXPORTS.has(state.view) ? "" : "none";
   }
 
   function populateFilters() {
@@ -345,7 +568,7 @@
     localStorage.setItem(LOGS_KEY, JSON.stringify(logs));
   }
 
-  function addLog(action, objectId, detail, user = CURRENT_USER.name) {
+  function addLog(action, objectId, detail, user = currentUser().name) {
     const logs = getLocalLogs();
     logs.unshift({
       id: `LOG-${Date.now()}`,
@@ -388,23 +611,20 @@
   }
 
   function render() {
-    const title = VIEW_TITLES[state.view] || "Tableau de bord";
+    if (VIEW_ALIASES[state.view]) state.view = VIEW_ALIASES[state.view];
+    const title = VIEW_TITLES[state.view] || "Centre de commandement";
     els.title.textContent = title;
 
     const renderers = {
-      dashboard: renderDashboard,
+      dashboard: renderCommandCenter,
       entry: renderEntry,
       myStops: renderMyStops,
       currentStops: renderCurrentStopsView,
       validation: renderValidation,
       stopDetail: renderStopDetail,
-      kpiDashboard: renderKpiDashboard,
-      indicators: renderIndicators,
       pareto: renderParetoAnalysis,
       performance: renderPerformanceCircuits,
-      dailyReports: renderReports,
-      monthlyReports: renderReports,
-      exportData: renderExportData,
+      reporting: renderReportingHub,
       equipments: renderEquipments,
       stopNatures: renderStopNatures,
       users: renderUsers,
@@ -418,8 +638,11 @@
       formulas: renderFormulas,
       dmaic: renderDmaic
     };
-    (renderers[state.view] || renderDashboard)();
+    updateFiltersVisibility();
+    (renderers[state.view] || renderCommandCenter)();
     injectProcessContext();
+    updateNotificationBadge();
+    paintShift();
   }
 
   function injectProcessContext() {
@@ -460,30 +683,78 @@
     return `<button type="button" class="workflow-step${active ? " active" : ""}" data-target-view="${escapeAttr(target)}" role="tab" aria-selected="${active}" title="Aller à ${escapeAttr(targetLabel)}">${escapeHtml(label)}</button>`;
   }
 
-  function renderDashboard() {
+  function renderCommandCenter() {
     const sourceEvents = getFilteredEvents();
     const events = getAnalysisEvents();
     const metrics = computeMetrics(events);
-    const pareto = topGroups(groupSum(events, "family"), 5);
-    const trend = getAllDays().map(computeDaySummary).slice(-7);
+    const pareto = topGroups(groupSum(events, "family"), 6);
+    const trend = getAllDays().map(computeDaySummary).slice(-14);
     const alerts = buildDashboardAlerts(metrics, pareto, sourceEvents);
-    const currentStops = decorateEvents(sourceEvents).filter((event) => event.status === "pending" || Number(event.durationHours) >= 2).slice(0, 3);
+    const decorated = decorateEvents(sourceEvents);
+    const pendingValidation = decorated.filter((e) => e.status === "pending").length;
+    const criticalStops = decorated.filter((e) => Number(e.durationHours) >= 2);
+    const longStops = decorated.filter((e) => e.status === "pending" && Number(e.durationHours) >= 2);
     const circuitRows = buildCircuitPerformance(metrics);
+    const shift = currentShift();
+    const profile = currentUser();
+    const costOfDowntime = metrics.totalStopHours * COST_PER_STOP_HOUR_EUR;
+    const trsDelta = metrics.trsGlobal - TRS_TARGET;
+    const trsMaintDelta = metrics.trsMaintenance - TRS_MAINT_TARGET;
+    const slaState = metrics.trsGlobal >= TRS_TARGET ? "ok" : metrics.trsGlobal >= TRS_TARGET - 0.05 ? "warn" : "alert";
+    const actionQueue = buildActionQueue(decorated, metrics);
 
     els.view.innerHTML = `
-      <div class="metric-grid dashboard-kpis">
-        ${kpiCard("TRS Global", fmtPct(metrics.trsGlobal), "Objectif : 85%", "green")}
-        ${kpiCard("TRS Exploitation", fmtPct(metrics.trsExploitation), "Objectif : 85%", "blue")}
-        ${kpiCard("TRS Maintenance", fmtPct(metrics.trsMaintenance), "Objectif : 80%", "purple")}
-        ${kpiCard("Temps d'arrêt total", fmtHours(metrics.totalStopHours), "Cumul mensuel", "amber")}
-        ${kpiCard("Nombre d'arrêts", fmtNumber(events.length, 0), "Lignes intégrées", "red")}
-        ${kpiCard("Débit global", `${fmtNumber(metrics.cadenceTph, 0)} t/h`, "Tonnage / marche", "teal")}
-      </div>
+      <section class="command-hero">
+        <div class="hero-greeting">
+          <span class="hero-eyebrow">Bonjour ${escapeHtml(profile.name.split(" ")[0])}</span>
+          <h2>${escapeHtml(profile.role)}</h2>
+          <p>${escapeHtml(shift.label)} · ${escapeHtml(shift.team)} en service · ${escapeHtml(profile.scope)}</p>
+          <div class="hero-meta">
+            <span class="meta-pill"><span class="dot dot-${slaState}"></span>SLA ${fmtPct(TRS_TARGET)} ${slaState === "ok" ? "respecté" : "à surveiller"}</span>
+            <span class="meta-pill"><strong>${fmtHours(metrics.totalStopHours)}</strong> d'arrêts cumulés</span>
+            <span class="meta-pill"><strong>${fmtNumber(pendingValidation, 0)}</strong> à valider</span>
+            <span class="meta-pill"><strong>${fmtNumber(criticalStops.length, 0)}</strong> incidents critiques</span>
+          </div>
+        </div>
+        <div class="hero-kpis">
+          <article class="hero-kpi">
+            <span class="hero-kpi-label">TRS Global</span>
+            <strong class="hero-kpi-value tone-${slaState}">${fmtPct(metrics.trsGlobal)}</strong>
+            <span class="hero-kpi-trend ${trsDelta >= 0 ? "up" : "down"}">${trsDelta >= 0 ? "▲" : "▼"} ${fmtPct(Math.abs(trsDelta))} vs objectif</span>
+          </article>
+          <article class="hero-kpi">
+            <span class="hero-kpi-label">Coût de l'indisponibilité</span>
+            <strong class="hero-kpi-value">${fmtNumber(costOfDowntime, 0)} €</strong>
+            <span class="hero-kpi-trend">${fmtNumber(COST_PER_STOP_HOUR_EUR, 0)} €/h × ${fmtHours(metrics.totalStopHours)}</span>
+          </article>
+          <article class="hero-kpi">
+            <span class="hero-kpi-label">TRS Maintenance</span>
+            <strong class="hero-kpi-value tone-${trsMaintDelta >= 0 ? "ok" : "warn"}">${fmtPct(metrics.trsMaintenance)}</strong>
+            <span class="hero-kpi-trend ${trsMaintDelta >= 0 ? "up" : "down"}">Objectif ${fmtPct(TRS_MAINT_TARGET)}</span>
+          </article>
+          <article class="hero-kpi">
+            <span class="hero-kpi-label">Débit moyen</span>
+            <strong class="hero-kpi-value">${fmtNumber(metrics.cadenceTph, 0)} t/h</strong>
+            <span class="hero-kpi-trend">${fmtNumber(metrics.pesageTotal, 0)} t pesées</span>
+          </article>
+        </div>
+      </section>
 
       <div class="dashboard-main">
+        <section class="panel action-queue-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Ce qui demande votre attention</h2>
+              <p class="status-line">File d'actions priorisée selon votre rôle et la criticité opérationnelle.</p>
+            </div>
+            <span class="badge red">${actionQueue.length}</span>
+          </div>
+          ${renderActionQueue(actionQueue)}
+        </section>
+
         <section class="panel">
           <div class="panel-head">
-            <h2>Arrêts par nature (Top 5)</h2>
+            <h2>Diagnostic Pareto — Top causes</h2>
             <span class="badge">${fmtHours(metrics.totalStopHours)}</span>
           </div>
           <div class="donut-layout">
@@ -494,30 +765,23 @@
 
         <section class="panel">
           <div class="panel-head">
-            <h2>Evolution du temps d'arrêt</h2>
-            <span class="badge blue">7 derniers jours</span>
+            <h2>Tendance des arrêts</h2>
+            <span class="badge blue">14 jours glissants</span>
           </div>
           <canvas id="daily-trend-chart" class="chart"></canvas>
         </section>
+      </div>
 
-        <section class="panel">
-          <div class="panel-head">
-            <h2>Alertes</h2>
-            <span class="badge red">${alerts.length}</span>
-          </div>
-          ${renderAlerts(alerts)}
-        </section>
+      <div class="metric-grid dashboard-kpis">
+        ${kpiCard("TRS Global", fmtPct(metrics.trsGlobal), `Objectif ${fmtPct(TRS_TARGET)}`, slaState === "ok" ? "green" : slaState === "warn" ? "amber" : "red")}
+        ${kpiCard("TRS Exploitation", fmtPct(metrics.trsExploitation), `Objectif ${fmtPct(TRS_TARGET)}`, "blue")}
+        ${kpiCard("TRS Maintenance", fmtPct(metrics.trsMaintenance), `Objectif ${fmtPct(TRS_MAINT_TARGET)}`, "purple")}
+        ${kpiCard("TRG", fmtPct(metrics.trgGlobal), "Disponibilité réelle", "teal")}
+        ${kpiCard("MTTR", fmtHours(computeMttr(events)), "Temps moyen réparation", "amber")}
+        ${kpiCard("MTBF", fmtHours(computeMtbf(events)), "Temps entre arrêts", "green")}
       </div>
 
       <div class="dashboard-bottom">
-        <section class="panel">
-          <div class="panel-head">
-            <h2>Arrêts critiques</h2>
-            <span class="badge warn">${currentStops.length}</span>
-          </div>
-          ${renderCurrentStops(currentStops)}
-        </section>
-
         <section class="panel">
           <div class="panel-head">
             <h2>Performance par circuit</h2>
@@ -525,22 +789,123 @@
           </div>
           <canvas id="circuit-chart" class="mini-chart"></canvas>
         </section>
-
         <section class="panel">
           <div class="panel-head">
-            <h2>Actions rapides</h2>
+            <h2>Heatmap criticité</h2>
+            <span class="badge red">Intensité</span>
           </div>
-          ${renderQuickActions()}
+          ${renderOperationalHeatmap(events)}
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Alertes opérationnelles</h2>
+            <span class="badge red">${alerts.length}</span>
+          </div>
+          ${renderAlerts(alerts)}
         </section>
       </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Incidents critiques en cours</h2>
+            <p class="status-line">Arrêts en attente d'action prioritaire — cliquer sur la ligne pour ouvrir la fiche.</p>
+          </div>
+          <span class="badge warn">${longStops.length} à traiter</span>
+        </div>
+        ${renderCurrentStops(longStops.slice(0, 6))}
+      </section>
     `;
 
     bindQuickActions();
+    bindStopActions();
     requestAnimationFrame(() => {
       drawDonut("nature-donut", pareto, metrics.totalStopHours);
       drawDailyTrend("daily-trend-chart", trend);
       drawCircuitBars("circuit-chart", circuitRows);
     });
+  }
+
+  function buildActionQueue(decorated, metrics) {
+    const queue = [];
+    const role = currentUser().role;
+    const perms = currentRolePermissions();
+    const pending = decorated.filter((e) => e.status === "pending");
+    const critical = decorated.filter((e) => Number(e.durationHours) >= 2 && e.status !== "rejected").slice(0, 5);
+    const longest = decorated.slice().sort((a, b) => (b.durationHours || 0) - (a.durationHours || 0)).slice(0, 5);
+
+    if (perms.canValidate && pending.length) {
+      queue.push({
+        priority: "high",
+        title: `${pending.length} arrêt${pending.length > 1 ? "s" : ""} en attente de validation`,
+        detail: `Top ${Math.min(pending.length, 5)} à traiter en priorité — fiabilise le calcul TRS.`,
+        cta: "Ouvrir la file",
+        target: "validation"
+      });
+    }
+    if (critical.length) {
+      queue.push({
+        priority: critical.length > 3 ? "high" : "med",
+        title: `${critical.length} incident${critical.length > 1 ? "s" : ""} critique${critical.length > 1 ? "s" : ""} > 2 h`,
+        detail: `Cause dominante : ${critical[0]?.family || "—"} sur ${critical[0]?.subEquipment || critical[0]?.sectionKey || "équipement"}.`,
+        cta: "Voir en direct",
+        target: "currentStops"
+      });
+    }
+    if (metrics.trsMaintenance < TRS_MAINT_TARGET) {
+      queue.push({
+        priority: "med",
+        title: `TRS Maintenance sous objectif (${fmtPct(metrics.trsMaintenance)})`,
+        detail: `Objectif ${fmtPct(TRS_MAINT_TARGET)} — analyser les arrêts maintenance dominants.`,
+        cta: "Analyse Pareto",
+        target: "pareto"
+      });
+    }
+    if (metrics.trsGlobal < TRS_TARGET - 0.02) {
+      queue.push({
+        priority: "high",
+        title: `SLA TRS Global non atteint (${fmtPct(metrics.trsGlobal)})`,
+        detail: `Écart ${fmtPct(Math.abs(metrics.trsGlobal - TRS_TARGET))} vs cible — diffuser un rapport d'écart.`,
+        cta: "Générer rapport",
+        target: "reporting"
+      });
+    }
+    if (perms.canCreate && role === "Agent de quart") {
+      queue.push({
+        priority: "low",
+        title: "Démarrer ma déclaration d'arrêt",
+        detail: "Saisir un nouvel incident pour alimenter la traçabilité.",
+        cta: "Nouvel arrêt",
+        target: "entry"
+      });
+    }
+    if (!queue.length) {
+      queue.push({
+        priority: "low",
+        title: "Aucune action critique en attente",
+        detail: "Continuer la surveillance opérationnelle.",
+        cta: "Voir les incidents",
+        target: "currentStops"
+      });
+    }
+    return queue;
+  }
+
+  function renderActionQueue(queue) {
+    return `
+      <div class="action-queue">
+        ${queue.map((item) => `
+          <article class="action-item priority-${escapeAttr(item.priority)}">
+            <span class="action-marker"></span>
+            <div class="action-body">
+              <strong>${escapeHtml(item.title)}</strong>
+              <p>${escapeHtml(item.detail)}</p>
+            </div>
+            <button class="action-cta" type="button" data-target-view="${escapeAttr(item.target)}">${escapeHtml(item.cta)} →</button>
+          </article>
+        `).join("")}
+      </div>
+    `;
   }
 
   function renderDailySynthesis() {
@@ -765,7 +1130,7 @@
 
   function renderMyStops() {
     const events = decorateEvents(getFilteredEvents());
-    const myEvents = events.filter((event) => event.declaredBy === CURRENT_USER.name || String(event.id).startsWith("LOCAL-"));
+    const myEvents = events.filter((event) => event.declaredBy === currentUser().name || String(event.id).startsWith("LOCAL-"));
     const rows = myEvents.length ? myEvents : events;
     const sorted = rows.slice().sort((a, b) => new Date(b.start || 0) - new Date(a.start || 0));
     const pending = sorted.filter((event) => event.status === "pending").length;
@@ -935,99 +1300,6 @@
     document.querySelector("[data-print-detail]")?.addEventListener("click", () => window.print());
   }
 
-  function renderKpiDashboard() {
-    const events = getAnalysisEvents();
-    const metrics = computeMetrics(events);
-    const dailyRows = getAllDays().map(computeDaySummary).slice(-12);
-
-    els.view.innerHTML = `
-      <div class="metric-grid dashboard-kpis">
-        ${kpiCard("TRS Global", fmtPct(metrics.trsGlobal), "Objectif : 85%", "green")}
-        ${kpiCard("TRS Exploitation", fmtPct(metrics.trsExploitation), "Objectif : 85%", "blue")}
-        ${kpiCard("TRS Maintenance", fmtPct(metrics.trsMaintenance), "Objectif : 80%", "purple")}
-        ${kpiCard("TRG Global", fmtPct(metrics.trgGlobal), "Disponibilité réelle", "teal")}
-        ${kpiCard("MTTR", fmtHours(computeMttr(events)), "Temps moyen réparation", "amber")}
-        ${kpiCard("MTBF", fmtHours(computeMtbf(events)), "Temps moyen entre arrêts", "green")}
-      </div>
-      <div class="two-col">
-        <section class="panel">
-          <div class="panel-head">
-            <h2>Jauge TRS global</h2>
-            <span class="badge">${fmtPct(metrics.trsGlobal)}</span>
-          </div>
-          <canvas id="trs-gauge" class="mini-chart"></canvas>
-        </section>
-        <section class="panel">
-          <div class="panel-head">
-            <h2>Tendance KPI</h2>
-            <span class="badge blue">12 derniers jours</span>
-          </div>
-          <canvas id="kpi-trend" class="chart"></canvas>
-        </section>
-      </div>
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>Heatmap opérationnelle</h2>
-            <p class="status-line">Intensité des arrêts par circuit sur les derniers jours pour repérer les zones critiques.</p>
-          </div>
-          <span class="badge red">Criticité</span>
-        </div>
-        ${renderOperationalHeatmap(events)}
-      </section>
-    `;
-
-    requestAnimationFrame(() => {
-      drawGauge("trs-gauge", metrics.trsGlobal, "TRS global");
-      drawDailyTrend("kpi-trend", dailyRows);
-    });
-  }
-
-  function renderIndicators() {
-    const events = getAnalysisEvents();
-    const metrics = computeMetrics(events);
-    const indicators = [
-      ["TRS Global", fmtPct(metrics.trsGlobal), "Disponibilité nette après arrêts exploitation et maintenance"],
-      ["TRS Exploitation", fmtPct(metrics.trsExploitation), "Impact des arrêts exploitation"],
-      ["TRS Maintenance", fmtPct(metrics.trsMaintenance), "Impact maintenance électrique, instrumentation, mécanique et bande"],
-      ["TRG Global", fmtPct(metrics.trgGlobal), "Temps de marche / temps disponible"],
-      ["Débit global", `${fmtNumber(metrics.cadenceTph, 0)} t/h`, "Tonnage chargé / heures de marche"],
-      ["Temps d'arrêt", fmtHours(metrics.totalStopHours), "Somme des arrêts filtrés"],
-      ["MTTR", fmtHours(computeMttr(events)), "Durée moyenne des interventions"],
-      ["MTBF", fmtHours(computeMtbf(events)), "Temps moyen entre deux arrêts"]
-    ];
-
-    els.view.innerHTML = `
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>Indicateurs de performance</h2>
-            <p class="status-line">Calcul automatique à partir des arrêts, tonnages, trains et navires intégrés depuis Excel ou saisis dans TRACE-PORT.</p>
-          </div>
-          <span class="badge cyan">Temps réel</span>
-        </div>
-        <div class="indicator-grid">
-          ${indicators.map(([label, value, body]) => `
-            <article class="indicator-card">
-              <span>${escapeHtml(label)}</span>
-              <strong>${value}</strong>
-              <p>${escapeHtml(body)}</p>
-            </article>
-          `).join("")}
-        </div>
-      </section>
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Détail des calculs</h2>
-          <button class="ghost-button" type="button" data-target-view="formulas">Voir les formules Excel reprises</button>
-        </div>
-        ${renderQualitySummary(metrics)}
-      </section>
-    `;
-
-    bindQuickActions();
-  }
-
   function renderParetoAnalysis() {
     const events = getAnalysisEvents();
     const pareto = topGroups(groupSum(events, "family"), 12);
@@ -1097,43 +1369,43 @@
     requestAnimationFrame(() => drawCircuitBars("performance-circuit-chart", circuits));
   }
 
-  function renderExportData() {
+  function renderReportingHub() {
+    const period = state.reportingPeriod === "monthly" ? "monthly" : "daily";
+    const isMonthly = period === "monthly";
+    const reportType = isMonthly ? "mensuel" : "journalier";
+    const rows = buildReportRows(period);
+    const events = getAnalysisEvents();
+    const metrics = computeMetrics(events);
+
     els.view.innerHTML = `
       <section class="panel">
         <div class="panel-head">
           <div>
-            <h2>Export des données</h2>
-            <p class="status-line">Exports opérationnels pour remplacer les extractions Excel manuelles et alimenter les rapports.</p>
+            <h2>Centre de reporting &amp; diffusion</h2>
+            <p class="status-line">Génération unifiée des rapports journaliers, mensuels et exports techniques — remplace l'envoi manuel des classeurs Excel.</p>
           </div>
-          <span class="badge">${fmtNumber(getAllEvents().length, 0)} arrêts</span>
+          <div class="segmented-control" role="tablist" aria-label="Période de reporting">
+            <button class="segment ${!isMonthly ? "is-active" : ""}" type="button" role="tab" aria-selected="${!isMonthly}" data-reporting-period="daily">Journalier</button>
+            <button class="segment ${isMonthly ? "is-active" : ""}" type="button" role="tab" aria-selected="${isMonthly}" data-reporting-period="monthly">Mensuel</button>
+          </div>
         </div>
-        <div class="export-grid">
-          ${exportCard("Journal des arrêts", "CSV compatible Excel", "Exporter CSV", "events-csv")}
-          ${exportCard("Synthèse complète", "JSON avec KPI, trains, navires et Pareto", "Exporter JSON", "summary-json")}
-          ${exportCard("Rapport journalier", "HTML imprimable / PDF navigateur", "Générer", "report-daily")}
-          ${exportCard("Rapport mensuel", "HTML imprimable / PDF navigateur", "Générer", "report-monthly")}
+        <div class="metric-grid">
+          ${metric("TRS Global", fmtPct(metrics.trsGlobal), `Objectif ${fmtPct(TRS_TARGET)}`)}
+          ${metric("Temps d'arrêt", fmtHours(metrics.totalStopHours), `${fmtNumber(events.length, 0)} événements`)}
+          ${metric("Tonnage", `${fmtNumber(metrics.pesageTotal, 0)} t`, `Débit ${fmtNumber(metrics.cadenceTph, 0)} t/h`)}
+          ${metric("Coût d'indisponibilité", `${fmtNumber(metrics.totalStopHours * COST_PER_STOP_HOUR_EUR, 0)} €`, "Estimation Janvier 2026")}
         </div>
       </section>
-    `;
 
-    bindExportCards();
-  }
-
-  function renderReports() {
-    const isMonthly = state.view === "monthlyReports";
-    const reportType = isMonthly ? "mensuel" : "journalier";
-    const rows = buildReportRows(isMonthly ? "monthly" : "daily");
-
-    els.view.innerHTML = `
       <section class="panel">
         <div class="panel-head">
           <div>
             <h2>Rapports ${isMonthly ? "mensuels" : "journaliers"}</h2>
-            <p class="status-line">Génération automatique à partir des synthèses recalculées par TRACE-PORT.</p>
+            <p class="status-line">Liasse standardisée : KPIs, Pareto, synthèses S/E, flux trains &amp; navires.</p>
           </div>
           <div class="inline-actions">
-            <button class="primary-button" type="button" data-report-kind="${isMonthly ? "monthly" : "daily"}" data-report-format="html">Générer PDF</button>
-            <button class="ghost-button" type="button" data-report-kind="${isMonthly ? "monthly" : "daily"}" data-report-format="csv">Générer Excel</button>
+            <button class="primary-button" type="button" data-report-kind="${period}" data-report-format="html">Générer PDF</button>
+            <button class="ghost-button" type="button" data-report-kind="${period}" data-report-format="csv">Générer Excel</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -1147,8 +1419,8 @@
                   <td>${escapeHtml(row.period)}</td>
                   <td>${fmtDateTime(row.generatedAt)}</td>
                   <td>
-                    <button class="table-action" type="button" data-report-kind="${isMonthly ? "monthly" : "daily"}" data-report-format="html">PDF</button>
-                    <button class="table-action" type="button" data-report-kind="${isMonthly ? "monthly" : "daily"}" data-report-format="csv">Excel</button>
+                    <button class="table-action" type="button" data-report-kind="${period}" data-report-format="html">PDF</button>
+                    <button class="table-action" type="button" data-report-kind="${period}" data-report-format="csv">Excel</button>
                   </td>
                 </tr>
               `).join("")}
@@ -1156,9 +1428,32 @@
           </table>
         </div>
       </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Exports techniques</h2>
+            <p class="status-line">Pour intégration BI, audits qualité et archivage SMQE.</p>
+          </div>
+          <span class="badge">${fmtNumber(getAllEvents().length, 0)} arrêts disponibles</span>
+        </div>
+        <div class="export-grid">
+          ${exportCard("Journal des arrêts", "CSV compatible Excel · 11 colonnes Bilan", "Exporter CSV", "events-csv")}
+          ${exportCard("Synthèse opérationnelle", "JSON avec KPI, trains, navires, Pareto, synthèses journalières", "Exporter JSON", "summary-json")}
+          ${exportCard("Rapport journalier (PDF)", "HTML imprimable, livré aux services chaque matin", "Générer", "report-daily")}
+          ${exportCard("Rapport mensuel (PDF)", "Bilan officiel de fin de mois pour la direction", "Générer", "report-monthly")}
+        </div>
+      </section>
     `;
 
     bindReportButtons();
+    bindExportCards();
+    document.querySelectorAll("[data-reporting-period]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.reportingPeriod = btn.dataset.reportingPeriod;
+        render();
+      });
+    });
   }
 
   function renderEquipments() {
@@ -2020,7 +2315,7 @@
   }
 
   function declaredByForEvent(event) {
-    const names = [CURRENT_USER.name, "Ahmed Benali", "Youssef El Amrani", "Khadija Saidi", "Système Excel"];
+    const names = [currentUser().name, "Ahmed Benali", "Youssef El Amrani", "Khadija Saidi", "Système Excel"];
     return names[hashString(event.id || event.row || event.description) % names.length];
   }
 
@@ -2118,7 +2413,7 @@
     const overrides = getValidationOverrides();
     overrides[id] = {
       status,
-      by: CURRENT_USER.name,
+      by: currentUser().name,
       at: new Date().toISOString(),
       comment
     };
@@ -2436,7 +2731,7 @@
     const newEvent = {
       id: `LOCAL-${Date.now()}`,
       row: null,
-      declaredBy: CURRENT_USER.name,
+      declaredBy: currentUser().name,
       status: "pending",
       createdAt: new Date().toISOString(),
       sectionKey: form.elements.sectionKey.value,

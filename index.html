@@ -11,84 +11,105 @@
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <span class="brand-mark">OCP</span>
+          <span class="brand-mark">
+            <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 22 L16 6 L28 22 Z" fill="#37c98b"/><path d="M4 22 L28 22 L28 26 L4 26 Z" fill="#0b315f"/></svg>
+          </span>
           <div>
             <strong>TRACE-PORT</strong>
-            <span>Traçabilité des arrêts</span>
+            <span>Smart Port Operations Intelligence</span>
           </div>
         </div>
         <nav class="nav" aria-label="Navigation principale">
-          <button class="nav-item active" data-view="dashboard" type="button"><span>⌁</span>Tableau de bord</button>
-
           <details class="nav-group" open>
-            <summary>1. Couche opérationnelle</summary>
-            <button class="nav-item" data-view="entry" type="button"><span>＋</span>Nouvel arrêt</button>
-            <button class="nav-item" data-view="myStops" type="button"><span>▤</span>Mes arrêts</button>
-            <button class="nav-item" data-view="currentStops" type="button"><span>◴</span>Arrêts en cours</button>
-            <button class="nav-item" data-view="validation" type="button"><span>✓</span>Validation</button>
+            <summary>Pilotage opérationnel</summary>
+            <button class="nav-item active" data-view="dashboard" type="button" data-icon="command">Centre de commandement</button>
+            <button class="nav-item" data-view="performance" type="button" data-icon="gauge">Performance circuits</button>
+            <button class="nav-item" data-view="pareto" type="button" data-icon="pareto">Analyse Pareto</button>
           </details>
 
           <details class="nav-group" open>
-            <summary>2. Couche monitoring</summary>
-            <button class="nav-item" data-view="kpiDashboard" type="button"><span>▥</span>Tableaux de bord</button>
-            <button class="nav-item" data-view="indicators" type="button"><span>↯</span>Indicateurs (KPI)</button>
-            <button class="nav-item" data-view="performance" type="button"><span>⌁</span>Performance circuits</button>
+            <summary>Exécution terrain</summary>
+            <button class="nav-item" data-view="entry" type="button" data-icon="add">Nouvel arrêt</button>
+            <button class="nav-item" data-view="myStops" type="button" data-icon="list">Mes arrêts</button>
+            <button class="nav-item" data-view="currentStops" type="button" data-icon="live">Arrêts en cours</button>
+            <button class="nav-item" data-view="validation" type="button" data-icon="check">Validation</button>
           </details>
 
           <details class="nav-group" open>
-            <summary>3. Couche décisionnelle</summary>
-            <button class="nav-item" data-view="pareto" type="button"><span>◔</span>Pareto des arrêts</button>
-            <button class="nav-item" data-view="dailyReports" type="button"><span>▣</span>Rapports journaliers</button>
-            <button class="nav-item" data-view="monthlyReports" type="button"><span>▦</span>Rapports mensuels</button>
-            <button class="nav-item" data-view="exportData" type="button"><span>⇩</span>Export des données</button>
+            <summary>Reporting &amp; diffusion</summary>
+            <button class="nav-item" data-view="reporting" type="button" data-icon="report">Rapports &amp; exports</button>
           </details>
 
-          <details class="nav-group" open>
-            <summary>4. Couche administration</summary>
-            <button class="nav-item" data-view="equipments" type="button"><span>▧</span>Équipements</button>
-            <button class="nav-item" data-view="stopNatures" type="button"><span>◇</span>Natures d'arrêt</button>
-            <button class="nav-item" data-view="users" type="button"><span>♙</span>Utilisateurs</button>
-            <button class="nav-item" data-view="logs" type="button"><span>◎</span>Traçabilité</button>
-            <button class="nav-item" data-view="settings" type="button"><span>⚙</span>Paramètres</button>
+          <details class="nav-group">
+            <summary>Référentiel &amp; gouvernance</summary>
+            <button class="nav-item" data-view="equipments" type="button" data-icon="hub">Équipements &amp; circuits</button>
+            <button class="nav-item" data-view="stopNatures" type="button" data-icon="layers">Natures d'arrêt</button>
+            <button class="nav-item" data-view="users" type="button" data-icon="users">Utilisateurs &amp; rôles</button>
+            <button class="nav-item" data-view="logs" type="button" data-icon="audit">Traçabilité</button>
+            <button class="nav-item" data-view="settings" type="button" data-icon="settings">Paramètres</button>
           </details>
         </nav>
         <div class="sidebar-meta">
-          <span id="source-month">Janvier 2026</span>
-          <span id="data-count">Base Excel importée</span>
+          <div class="meta-row"><span class="meta-label">Période active</span><span id="source-month">Janvier 2026</span></div>
+          <div class="meta-row"><span class="meta-label">Source données</span><span id="data-count">863 lignes</span></div>
+          <div class="meta-row"><span class="meta-label">Build</span><span>v2.0 enterprise</span></div>
         </div>
       </aside>
 
       <main class="workspace">
         <header class="topbar">
-          <div>
-            <p class="eyebrow">Système de traçabilité des arrêts de manutention</p>
-            <h1 id="view-title">Tableau de bord</h1>
-            <span class="site-label">Direction Logistique Portuaire - OCP Casablanca</span>
+          <div class="topbar-left">
+            <p class="eyebrow">Plateforme de transformation digitale Industrie 4.0</p>
+            <h1 id="view-title">Centre de commandement</h1>
+            <span class="site-label">Direction Logistique Portuaire — OCP Casablanca · Production live</span>
           </div>
           <div class="topbar-right">
-            <label class="top-search">Recherche rapide
-              <input id="global-search" type="search" placeholder="Arrêt, équipement, navire">
-            </label>
-            <label class="top-control">Période
-              <input id="global-date" type="date" value="2026-01-31">
-            </label>
-            <span class="env-status">Production simulée</span>
-            <button class="icon-button" type="button" title="Notifications">⌁<span class="notification-dot">5</span></button>
-            <div class="user-chip">
-              <span class="avatar">IH</span>
+            <div class="shift-chip" id="shift-chip" title="Quart en cours">
+              <span class="shift-icon" aria-hidden="true"></span>
               <div>
-                <strong>El Houdzi Israa</strong>
-                <span>Administrateur</span>
+                <span class="shift-label">Quart en cours</span>
+                <strong id="shift-name">—</strong>
               </div>
+            </div>
+            <div class="sync-chip" id="sync-chip" title="Dernière synchronisation des données">
+              <span class="sync-pulse" aria-hidden="true"></span>
+              <div>
+                <span class="sync-label">Synchronisé</span>
+                <strong id="sync-time">à l'instant</strong>
+              </div>
+            </div>
+            <button class="icon-button" id="refresh-button" type="button" title="Actualiser les données">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L8 6l4 4V7a5 5 0 0 1 5 5h2a7 7 0 0 0-7-7Zm-5 7H5a7 7 0 0 0 12 5l-1.4-1.4A5 5 0 0 1 7 12Z" fill="currentColor"/></svg>
+            </button>
+            <button class="icon-button alert-button" id="notification-button" type="button" title="Alertes opérationnelles">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2Zm6-6V11a6 6 0 1 0-12 0v5l-2 2v1h16v-1l-2-2Z" fill="currentColor"/></svg>
+              <span class="notification-dot" id="notification-count">0</span>
+            </button>
+            <div class="user-chip" id="user-chip">
+              <span class="avatar" id="user-avatar">IH</span>
+              <div class="user-info">
+                <strong id="user-name">El Houdzi Israa</strong>
+                <span id="user-role">Administrateur</span>
+              </div>
+              <button class="user-toggle" id="user-toggle" type="button" aria-label="Changer de profil" aria-haspopup="menu" aria-expanded="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg>
+              </button>
+              <div class="user-menu" id="user-menu" role="menu" hidden></div>
             </div>
           </div>
         </header>
 
-        <section class="filters toolbar" aria-label="Filtres">
+        <section class="filters toolbar" id="filters-toolbar" aria-label="Filtres analytiques">
           <label>S/E<select id="filter-section"></select></label>
           <label>Famille<select id="filter-family"></select></label>
           <label>Qualité<select id="filter-quality"></select></label>
-          <label class="search-box">Recherche<input id="filter-search" type="search" placeholder="Navire, description, équipement"></label>
+          <label class="search-box">Recherche
+            <input id="filter-search" type="search" placeholder="Navire, description, équipement">
+            <input id="global-search" type="hidden">
+          </label>
+          <label class="top-control">Période
+            <input id="global-date" type="date" value="2026-01-31">
+          </label>
           <div class="actions">
             <button class="ghost-button" id="export-csv" type="button">Exporter CSV</button>
             <button class="primary-button" id="export-json" type="button">Exporter synthèse</button>
