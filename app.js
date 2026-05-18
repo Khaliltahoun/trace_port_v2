@@ -217,9 +217,15 @@
   ];
 
   const PAGE_SIZE = 20;
+  const AUTO_REFRESH_MS = 30000;
+  const MONTH_REFERENCE = new Date("2026-01-15T12:00:00");
+  const MONTH_END_REFERENCE = new Date("2026-01-31T23:59:59");
+
   const state = {
     view: "dashboard",
     profile: loadProfile(),
+    period: "mtd",
+    customDate: "2026-01-31",
     filters: {
       section: "all",
       family: "all",
@@ -232,6 +238,7 @@
     formulaSheet: "all",
     reportingPeriod: "daily",
     lastSync: new Date(),
+    autoRefreshTimer: null,
     pagination: {
       myStops: 1,
       currentStops: 1,
@@ -243,6 +250,60 @@
       formulas: 1
     }
   };
+
+  function periodRange() {
+    // Reference month: January 2026 (the dataset). For the demo, we anchor "today" to the dataset's mid-point so periods always cover real data.
+    const today = MONTH_REFERENCE;
+    const range = { from: null, to: null, label: "" };
+    if (state.period === "today") {
+      const d = state.customDate ? new Date(`${state.customDate}T00:00:00`) : today;
+      const start = new Date(d); start.setHours(0, 0, 0, 0);
+      const end = new Date(d); end.setHours(23, 59, 59, 999);
+      range.from = start; range.to = end; range.label = `Journée du ${start.toLocaleDateString("fr-FR")}`;
+    } else if (state.period === "7d") {
+      const end = today;
+      const start = new Date(today); start.setDate(start.getDate() - 6); start.setHours(0, 0, 0, 0);
+      range.from = start; range.to = end; range.label = "7 derniers jours";
+    } else if (state.period === "mtd") {
+      const start = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0);
+      range.from = start; range.to = today; range.label = `Mois en cours · ${start.toLocaleString("fr-FR", { month: "long" })} ${start.getFullYear()}`;
+    } else if (state.period === "custom") {
+      const d = state.customDate ? new Date(`${state.customDate}T00:00:00`) : today;
+      const start = new Date(d); start.setHours(0, 0, 0, 0);
+      const end = new Date(d); end.setHours(23, 59, 59, 999);
+      range.from = start; range.to = end; range.label = `Date personnalisée · ${start.toLocaleDateString("fr-FR")}`;
+    } else {
+      const start = new Date(today.getFullYear(), today.getMonth(), 1);
+      const end = MONTH_END_REFERENCE;
+      range.from = start; range.to = end; range.label = `${start.toLocaleString("fr-FR", { month: "long" })} ${start.getFullYear()} complet`;
+    }
+    return range;
+  }
+
+  function periodDays() {
+    const r = periodRange();
+    if (!r.from || !r.to) return 31;
+    const diff = (r.to.getTime() - r.from.getTime()) / 86400000;
+    return Math.max(1, Math.ceil(diff));
+  }
+
+  function periodElapsedFraction() {
+    if (state.period !== "mtd") return 1;
+    const r = periodRange();
+    const monthStart = new Date(r.from);
+    const monthEnd = new Date(r.from.getFullYear(), r.from.getMonth() + 1, 0, 23, 59, 59);
+    const totalMs = monthEnd.getTime() - monthStart.getTime();
+    const elapsedMs = Math.max(0, Math.min(totalMs, r.to.getTime() - monthStart.getTime()));
+    return totalMs > 0 ? elapsedMs / totalMs : 1;
+  }
+
+  function eventInPeriod(event) {
+    const r = periodRange();
+    if (!r.from || !r.to) return true;
+    const ts = new Date(event.start || event.end || event.day || 0).getTime();
+    if (!Number.isFinite(ts) || ts === 0) return false;
+    return ts >= r.from.getTime() && ts <= r.to.getTime();
+  }
 
   function loadProfile() {
     try {
@@ -307,6 +368,11 @@
     globalDate: document.getElementById("global-date"),
     dataCount: document.getElementById("data-count"),
     filtersToolbar: document.getElementById("filters-toolbar"),
+    periodBar: document.getElementById("period-bar"),
+    periodToggle: document.getElementById("period-toggle"),
+    periodSummary: document.getElementById("period-summary"),
+    periodCustomWrap: document.getElementById("period-custom-wrap"),
+    liveIndicator: document.getElementById("live-indicator"),
     notificationCount: document.getElementById("notification-count"),
     notificationButton: document.getElementById("notification-button"),
     refreshButton: document.getElementById("refresh-button"),
@@ -327,10 +393,71 @@
     populateFilters();
     bindShell();
     bindShellShortcuts();
+    bindPeriodSelector();
     paintShift();
     paintProfile();
+    paintPeriodSummary();
     setInterval(paintShift, 60000);
+    startAutoRefresh();
     render();
+  }
+
+  function bindPeriodSelector() {
+    if (!els.periodToggle) return;
+    els.periodToggle.querySelectorAll("[data-period]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const period = btn.dataset.period;
+        state.period = period;
+        els.periodToggle.querySelectorAll("[data-period]").forEach((b) => {
+          const active = b === btn;
+          b.classList.toggle("is-active", active);
+          b.setAttribute("aria-selected", active);
+        });
+        if (els.periodCustomWrap) {
+          els.periodCustomWrap.hidden = period !== "custom" && period !== "today";
+        }
+        resetPagination();
+        paintPeriodSummary();
+        render();
+      });
+    });
+
+    els.globalDate?.addEventListener("change", () => {
+      state.customDate = els.globalDate.value;
+      if (state.period === "custom" || state.period === "today") {
+        paintPeriodSummary();
+        render();
+      }
+    });
+  }
+
+  function paintPeriodSummary() {
+    if (!els.periodSummary) return;
+    const r = periodRange();
+    const events = getFilteredEvents();
+    const hours = sum(events, "durationHours");
+    els.periodSummary.innerHTML = `<strong>${escapeHtml(r.label)}</strong> · ${fmtNumber(events.length, 0)} arrêts · ${fmtHours(hours)} cumul`;
+  }
+
+  function startAutoRefresh() {
+    if (state.autoRefreshTimer) clearInterval(state.autoRefreshTimer);
+    state.autoRefreshTimer = setInterval(() => {
+      state.lastSync = new Date();
+      paintShift();
+      paintPeriodSummary();
+      pulseLiveIndicator();
+      if (state.view === "dashboard") {
+        render();
+      } else {
+        updateNotificationBadge();
+      }
+    }, AUTO_REFRESH_MS);
+  }
+
+  function pulseLiveIndicator() {
+    if (!els.liveIndicator) return;
+    els.liveIndicator.classList.add("pulsing");
+    setTimeout(() => els.liveIndicator?.classList.remove("pulsing"), 800);
   }
 
   function paintNavIcons() {
@@ -380,11 +507,6 @@
     els.globalSearch?.addEventListener("input", () => {
       if (els.search) els.search.value = els.globalSearch.value;
       queueSearch(els.globalSearch.value);
-    });
-
-    els.globalDate?.addEventListener("change", () => {
-      state.dailyDate = els.globalDate.value || state.dailyDate;
-      if (state.view === "reporting" || state.view === "dashboard") render();
     });
 
     document.getElementById("export-csv").addEventListener("click", exportEventsCsv);
@@ -644,7 +766,16 @@
         event.quality,
         event.destination
       ].join(" ").toLowerCase();
-      return sectionOk && familyOk && qualityOk && (!query || haystack.includes(query));
+      const periodOk = eventInPeriod(event);
+      return sectionOk && familyOk && qualityOk && periodOk && (!query || haystack.includes(query));
+    });
+  }
+
+  function getEventsInRange(from, to) {
+    if (!from || !to) return getAllEvents();
+    return getAllEvents().filter((event) => {
+      const ts = new Date(event.start || event.end || 0).getTime();
+      return Number.isFinite(ts) && ts >= from.getTime() && ts <= to.getTime();
     });
   }
 
@@ -750,18 +881,22 @@
     const trsMaintDelta = metrics.trsMaintenance - TRS_MAINT_TARGET;
     const slaState = metrics.trsGlobal >= TRS_TARGET ? "ok" : metrics.trsGlobal >= TRS_TARGET - 0.05 ? "warn" : "alert";
     const actionQueue = buildActionQueue(decorated, metrics);
+    const liveFeed = buildLiveFeed(decorated);
+    const projection = buildProjection(metrics);
+    const periodRangeData = periodRange();
 
     els.view.innerHTML = `
       <section class="command-hero">
         <div class="hero-greeting">
           <span class="hero-eyebrow">Bonjour ${escapeHtml(profile.name.split(" ")[0])}</span>
           <h2>${escapeHtml(profile.role)}</h2>
-          <p>${escapeHtml(shift.label)} · ${escapeHtml(shift.team)} en service · ${escapeHtml(profile.scope)}</p>
+          <p>${escapeHtml(shift.label)} · ${escapeHtml(shift.team)} en service · ${escapeHtml(periodRangeData.label)}</p>
           <div class="hero-meta">
             <span class="meta-pill"><span class="dot dot-${slaState}"></span>SLA ${fmtPct(TRS_TARGET)} ${slaState === "ok" ? "respecté" : "à surveiller"}</span>
             <span class="meta-pill"><strong>${fmtHours(metrics.totalStopHours)}</strong> d'arrêts cumulés</span>
             <span class="meta-pill"><strong>${fmtNumber(pendingValidation, 0)}</strong> à valider</span>
             <span class="meta-pill"><strong>${fmtNumber(criticalStops.length, 0)}</strong> incidents critiques</span>
+            ${projection.show ? `<span class="meta-pill projection ${projection.tone}">📈 Projection fin de mois : <strong>${fmtPct(projection.trsProjected)}</strong> ${projection.deltaLabel}</span>` : ""}
           </div>
         </div>
         <div class="hero-kpis">
@@ -841,6 +976,30 @@
           ${CIRCUITS.map((circuit) => renderCircuitStatusCard(circuit, decorated, metrics)).join("")}
         </div>
       </section>
+
+      <div class="two-col">
+        <section class="panel live-feed-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Flux opérationnel temps réel</h2>
+              <p class="status-line">Stream des saisies les plus récentes — actualisé toutes les 30 s.</p>
+            </div>
+            <span class="live-badge"><span class="live-dot"></span>Live</span>
+          </div>
+          ${renderLiveFeed(liveFeed)}
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Cadence opérationnelle ${escapeHtml(periodRangeData.label)}</h2>
+              <p class="status-line">Pace de la période vs objectif et projection automatique.</p>
+            </div>
+            <span class="badge ${projection.tone}">${projection.show ? "Pace " + fmtPct(projection.elapsed) : "Mois clos"}</span>
+          </div>
+          ${renderPaceTracker(metrics, projection)}
+        </section>
+      </div>
 
       <div class="dashboard-bottom">
         <section class="panel">
@@ -965,6 +1124,109 @@
             <button class="action-cta" type="button" data-target-view="${escapeAttr(item.target)}">${escapeHtml(item.cta)} →</button>
           </article>
         `).join("")}
+      </div>
+    `;
+  }
+
+  function buildLiveFeed(decorated) {
+    const all = decorated.slice().sort((a, b) => {
+      const ta = new Date(a.createdAt || a.end || a.start || 0).getTime();
+      const tb = new Date(b.createdAt || b.end || b.start || 0).getTime();
+      return tb - ta;
+    });
+    return all.slice(0, 8);
+  }
+
+  function renderLiveFeed(items) {
+    if (!items.length) return `<div class="empty-state">Aucune saisie sur la période sélectionnée.</div>`;
+    return `
+      <div class="live-feed">
+        ${items.map((item) => {
+          const ts = new Date(item.createdAt || item.end || item.start || 0);
+          const isLocal = String(item.id || "").startsWith("LOCAL-");
+          const tone = item.status === "validated" ? "ok" : item.status === "rejected" ? "alert" : "warn";
+          return `
+            <article class="live-feed-item">
+              <span class="live-feed-time">${escapeHtml(relativeTimeFrom(ts))}</span>
+              <div class="live-feed-body">
+                <strong>${escapeHtml(item.family || "Arrêt")} sur ${escapeHtml(item.sectionKey || "—")}</strong>
+                <p>${escapeHtml(truncate(item.description || "—", 90))}</p>
+                <span class="live-feed-meta">
+                  <span class="badge ${tone}">${statusLabel(item.status)}</span>
+                  <span>${fmtHours(item.durationHours)}</span>
+                  <span>${escapeHtml(item.declaredBy || "—")}</span>
+                  ${isLocal ? `<span class="badge cyan">Local</span>` : ""}
+                </span>
+              </div>
+              <button class="ghost-button table-action" type="button" data-detail-id="${escapeAttr(item.id)}">Ouvrir</button>
+            </article>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  function buildProjection(metrics) {
+    const elapsed = periodElapsedFraction();
+    if (state.period !== "mtd" || elapsed >= 0.999 || elapsed <= 0) {
+      return { show: false, elapsed, trsProjected: metrics.trsGlobal, deltaLabel: "", tone: "" };
+    }
+    // Project total stop hours linearly to full period
+    const projectedStopHours = metrics.totalStopHours / Math.max(elapsed, 0.01);
+    const fullPeriodAvailable = metrics.chargingAvailableHours / Math.max(elapsed, 0.01);
+    const trsProjected = Math.max(0, (fullPeriodAvailable - projectedStopHours) / fullPeriodAvailable);
+    const delta = trsProjected - TRS_TARGET;
+    const tone = trsProjected >= TRS_TARGET ? "green" : trsProjected >= TRS_TARGET - 0.05 ? "warn" : "red";
+    const deltaLabel = `${delta >= 0 ? "+" : ""}${fmtPct(delta)} vs objectif`;
+    return { show: true, elapsed, trsProjected, deltaLabel, tone, projectedStopHours };
+  }
+
+  function renderPaceTracker(metrics, projection) {
+    if (!projection.show) {
+      return `<div class="pace-tracker"><p class="status-line">Période figée — KPI consolidés.</p></div>`;
+    }
+    const elapsedPct = Math.max(0, Math.min(100, projection.elapsed * 100));
+    const trsNow = metrics.trsGlobal;
+    const trsTarget = TRS_TARGET;
+    const stopBudget = metrics.chargingAvailableHours * (1 - TRS_TARGET);
+    const stopUsed = metrics.totalStopHours;
+    const stopBudgetPct = Math.max(0, Math.min(120, (stopUsed / Math.max(stopBudget, 1)) * 100));
+    const budgetTone = stopBudgetPct <= elapsedPct + 5 ? "ok" : stopBudgetPct <= elapsedPct + 15 ? "warn" : "alert";
+
+    return `
+      <div class="pace-tracker">
+        <div class="pace-row">
+          <div class="pace-label">
+            <span>Temps de la période écoulé</span>
+            <strong>${fmtPct(projection.elapsed)}</strong>
+          </div>
+          <div class="pace-bar"><div class="pace-fill pace-elapsed" style="width:${elapsedPct}%"></div></div>
+        </div>
+        <div class="pace-row">
+          <div class="pace-label">
+            <span>Budget arrêts consommé (cible ${fmtPct(1 - TRS_TARGET)})</span>
+            <strong class="tone-${budgetTone}">${fmtPct(stopUsed / Math.max(stopBudget, 1))}</strong>
+          </div>
+          <div class="pace-bar"><div class="pace-fill pace-budget tone-${budgetTone}" style="width:${Math.min(100, stopBudgetPct)}%"></div></div>
+        </div>
+        <div class="pace-projection">
+          <div>
+            <span>TRS actuel</span>
+            <strong>${fmtPct(trsNow)}</strong>
+          </div>
+          <div>
+            <span>Projection fin de mois</span>
+            <strong class="tone-${projection.tone === "green" ? "ok" : projection.tone === "warn" ? "warn" : "alert"}">${fmtPct(projection.trsProjected)}</strong>
+          </div>
+          <div>
+            <span>Objectif</span>
+            <strong>${fmtPct(trsTarget)}</strong>
+          </div>
+          <div>
+            <span>Arrêts restant tolérés</span>
+            <strong>${fmtHours(Math.max(0, stopBudget - stopUsed))}</strong>
+          </div>
+        </div>
       </div>
     `;
   }
@@ -1436,16 +1698,19 @@
     const circuits = buildCircuitPerformance(metrics);
     const chargingRows = buildSynthesisRows(events, CHARGING_SECTIONS, metrics.chargingAvailableHours);
     const dischargeRows = buildSynthesisRows(events, DISCHARGE_SECTIONS, Math.max(getAllDays().length * 48, 1));
+    const equipmentRanking = buildEquipmentRanking(events, metrics);
+    const periodHours = periodDays() * 24 * CHARGING_SECTIONS.length;
 
     els.view.innerHTML = `
       <div class="metric-grid">
         ${circuits.map((row, index) => kpiCard(row.label, fmtPct(row.value), "Performance circuit", ["green", "blue", "amber", "teal"][index] || "blue")).join("")}
       </div>
+
       <div class="two-col">
         <section class="panel">
           <div class="panel-head">
             <h2>Performance circuits</h2>
-            <span class="badge cyan">TRS</span>
+            <span class="badge cyan">TRS · ${escapeHtml(periodRange().label)}</span>
           </div>
           <canvas id="performance-circuit-chart" class="chart"></canvas>
         </section>
@@ -1454,6 +1719,33 @@
           ${renderSynthesisMini(chargingRows, metrics.chargingAvailableHours)}
         </section>
       </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Top équipements par impact</h2>
+            <p class="status-line">Classement temps réel par durée d'arrêt cumulée sur la période — sous-équipements critiques en haut de liste.</p>
+          </div>
+          <span class="badge red">${fmtNumber(equipmentRanking.length, 0)} équipements actifs</span>
+        </div>
+        <div class="equipment-ranking">
+          ${equipmentRanking.slice(0, 12).map((eq, idx) => `
+            <div class="equipment-rank-row tone-${eq.tone}">
+              <span class="rank-index">${idx + 1}</span>
+              <div class="rank-body">
+                <strong>${escapeHtml(eq.code)}</strong>
+                <span class="status-line">${escapeHtml(eq.circuit)} · ${fmtNumber(eq.count, 0)} arrêts · cause dominante <em>${escapeHtml(eq.topFamily)}</em></span>
+              </div>
+              <div class="rank-bar"><div class="rank-fill" style="width:${eq.barPct}%"></div></div>
+              <div class="rank-values">
+                <span class="rank-time">${fmtHours(eq.hours)}</span>
+                <span class="rank-avail">Dispo ${fmtPct(eq.availability)}</span>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      </section>
+
       <section class="panel">
         <div class="panel-head">
           <h2>Synthèse déchargement trains</h2>
@@ -1464,6 +1756,43 @@
     `;
 
     requestAnimationFrame(() => drawCircuitBars("performance-circuit-chart", circuits));
+  }
+
+  function buildEquipmentRanking(events, metrics) {
+    const grouped = new Map();
+    events.forEach((event) => {
+      const code = event.subEquipment || event.sectionKey || "Non affecté";
+      const current = grouped.get(code) || {
+        code,
+        circuit: circuitForSection(event.sectionKey || ""),
+        hours: 0,
+        count: 0,
+        families: new Map()
+      };
+      current.hours += Number(event.durationHours) || 0;
+      current.count += 1;
+      const fam = event.family || "—";
+      current.families.set(fam, (current.families.get(fam) || 0) + (Number(event.durationHours) || 0));
+      grouped.set(code, current);
+    });
+    const rows = Array.from(grouped.values()).map((r) => {
+      const topFamilyEntry = Array.from(r.families.entries()).sort((a, b) => b[1] - a[1])[0];
+      const totalAvailable = Math.max(periodDays() * 24, 1);
+      const availability = Math.max(0, Math.min(1, (totalAvailable - r.hours) / totalAvailable));
+      const tone = availability >= 0.9 ? "ok" : availability >= 0.75 ? "warn" : "alert";
+      return {
+        code: r.code,
+        circuit: r.circuit,
+        hours: r.hours,
+        count: r.count,
+        topFamily: topFamilyEntry?.[0] || "—",
+        availability,
+        tone
+      };
+    }).sort((a, b) => b.hours - a.hours);
+    const maxHours = rows[0]?.hours || 1;
+    rows.forEach((r) => { r.barPct = Math.min(100, (r.hours / maxHours) * 100); });
+    return rows;
   }
 
   function renderReportingHub() {
@@ -1848,6 +2177,17 @@
             <label>Destination<input name="destination" placeholder="Destination produit"></label>
             <label class="full">Description / justification<textarea name="description" placeholder="Nature de l'anomalie, action terrain entreprise" rows="3"></textarea></label>
           </div>
+          <aside class="impact-preview" id="impact-preview" aria-live="polite">
+            <span class="impact-title">Impact estimé sur les KPI</span>
+            <div class="impact-grid">
+              <div><span>Circuits propagés</span><strong id="impact-circuits">${CHARGING_SECTIONS.length}</strong></div>
+              <div><span>Heures d'arrêt ajoutées</span><strong id="impact-hours">0 h</strong></div>
+              <div><span>Impact TRS (période)</span><strong id="impact-trs">—</strong></div>
+              <div><span>Coût ajouté</span><strong id="impact-cost">0 €</strong></div>
+            </div>
+            <p class="impact-note" id="impact-note">Ajustez les circuits et la durée pour voir l'impact en direct.</p>
+          </aside>
+
           <div class="entry-actions">
             <button class="primary-button" type="submit">Enregistrer &amp; propager</button>
             <button class="ghost-button" id="clear-template" type="button">Vider le formulaire</button>
@@ -1871,10 +2211,13 @@
       const start = form.elements.start.value;
       const end = form.elements.end.value;
       preview.value = fmtHours(hoursBetweenLocal(start, end));
+      updateImpactPreview(form);
     };
     form.elements.start.addEventListener("input", updatePreview);
     form.elements.end.addEventListener("input", updatePreview);
+    form.querySelectorAll("input[name=circuits]").forEach((box) => box.addEventListener("change", () => updateImpactPreview(form)));
     form.addEventListener("submit", handleEventSubmit);
+    updateImpactPreview(form);
 
     document.getElementById("clear-template")?.addEventListener("click", () => {
       form.reset();
@@ -1909,6 +2252,7 @@
         form.elements.start.value = formatLocalForInput(start);
         form.elements.end.value = formatLocalForInput(now);
         updatePreview();
+        updateImpactPreview(form);
         form.elements.subEquipment.focus();
       });
     });
@@ -1926,6 +2270,40 @@
   function formatLocalForInput(date) {
     const pad = (n) => String(n).padStart(2, "0");
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  function updateImpactPreview(form) {
+    if (!form) return;
+    const circuitsEl = document.getElementById("impact-circuits");
+    const hoursEl = document.getElementById("impact-hours");
+    const trsEl = document.getElementById("impact-trs");
+    const costEl = document.getElementById("impact-cost");
+    const noteEl = document.getElementById("impact-note");
+    if (!circuitsEl) return;
+
+    const circuits = Array.from(form.querySelectorAll("input[name=circuits]:checked")).map((b) => b.value);
+    const durationHours = hoursBetweenLocal(form.elements.start.value, form.elements.end.value);
+    const addedStopHours = (durationHours || 0) * circuits.length;
+    const metrics = computeMetrics(getAnalysisEvents());
+    const currentTrs = metrics.trsGlobal;
+    const available = Math.max(metrics.chargingAvailableHours, 1);
+    const projectedStop = metrics.totalStopHours + addedStopHours;
+    const projectedTrs = Math.max(0, (available - projectedStop) / available);
+    const trsDelta = projectedTrs - currentTrs;
+    const addedCost = addedStopHours * COST_PER_STOP_HOUR_EUR;
+
+    circuitsEl.textContent = String(circuits.length);
+    hoursEl.textContent = fmtHours(addedStopHours);
+    trsEl.innerHTML = `<span class="tone-${trsDelta >= -0.005 ? "ok" : trsDelta >= -0.02 ? "warn" : "alert"}">${trsDelta >= 0 ? "+" : ""}${fmtPct(trsDelta)}</span>`;
+    costEl.textContent = `${fmtNumber(addedCost, 0)} €`;
+
+    if (!circuits.length) {
+      noteEl.textContent = "Sélectionnez au moins un circuit affecté pour estimer l'impact.";
+    } else if (!Number.isFinite(durationHours) || durationHours <= 0) {
+      noteEl.textContent = `Renseignez début et fin — l'impact sera propagé sur ${circuits.length} circuit${circuits.length > 1 ? "s" : ""} (${circuits.join(" · ")}).`;
+    } else {
+      noteEl.textContent = `Cet arrêt ajoutera ${fmtHours(addedStopHours)} cumulés (${circuits.length} × ${fmtHours(durationHours)}). TRS Global passerait de ${fmtPct(currentTrs)} à ${fmtPct(projectedTrs)}.`;
+    }
   }
 
   function renderTonnage() {

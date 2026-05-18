@@ -107,6 +107,30 @@
           </div>
         </header>
 
+        <section class="period-bar" id="period-bar" aria-label="Période d'analyse">
+          <div class="period-bar-left">
+            <span class="period-bar-label">Période d'analyse</span>
+            <div class="segmented-control period-toggle" id="period-toggle" role="tablist" aria-label="Période">
+              <button class="segment" data-period="today" type="button" role="tab">Aujourd'hui</button>
+              <button class="segment" data-period="7d" type="button" role="tab">7 jours</button>
+              <button class="segment is-active" data-period="mtd" type="button" role="tab" aria-selected="true">Mois en cours</button>
+              <button class="segment" data-period="month" type="button" role="tab">Mois complet</button>
+            </div>
+            <label class="top-control period-custom" hidden id="period-custom-wrap">Date
+              <input id="global-date" type="date" value="2026-01-31">
+            </label>
+            <span class="period-summary" id="period-summary">—</span>
+          </div>
+          <div class="period-bar-right">
+            <span class="live-indicator" id="live-indicator" title="Mise à jour automatique toutes les 30 s">
+              <span class="live-dot"></span>
+              <span>Live</span>
+            </span>
+            <button class="ghost-button" id="export-csv" type="button">Exporter CSV</button>
+            <button class="primary-button" id="export-json" type="button">Exporter synthèse</button>
+          </div>
+        </section>
+
         <section class="filters toolbar" id="filters-toolbar" aria-label="Filtres analytiques">
           <label>S/E<select id="filter-section"></select></label>
           <label>Famille<select id="filter-family"></select></label>
@@ -115,13 +139,6 @@
             <input id="filter-search" type="search" placeholder="Navire, description, équipement">
             <input id="global-search" type="hidden">
           </label>
-          <label class="top-control">Période
-            <input id="global-date" type="date" value="2026-01-31">
-          </label>
-          <div class="actions">
-            <button class="ghost-button" id="export-csv" type="button">Exporter CSV</button>
-            <button class="primary-button" id="export-json" type="button">Exporter synthèse</button>
-          </div>
         </section>
 
         <section id="view" class="view" aria-live="polite"></section>
