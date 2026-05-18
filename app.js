@@ -151,6 +151,7 @@
     }
   ];
 
+  const PAGE_SIZE = 20;
   const state = {
     view: "dashboard",
     filters: {
@@ -162,8 +163,26 @@
     dailyDate: null,
     selectedEventId: null,
     formulaSearch: "",
-    formulaSheet: "all"
+    formulaSheet: "all",
+    pagination: {
+      myStops: 1,
+      currentStops: 1,
+      validation: 1,
+      events: 1,
+      logs: 1,
+      equipments: 1,
+      stopNatures: 1,
+      formulas: 1
+    }
   };
+
+  const WORKFLOW_STEPS = [
+    { key: "Saisie", target: "entry", views: ["entry", "myStops"] },
+    { key: "Validation", target: "validation", views: ["validation", "stopDetail"] },
+    { key: "KPI", target: "kpiDashboard", views: ["dashboard", "kpiDashboard", "indicators", "performance"] },
+    { key: "Décision", target: "pareto", views: ["pareto", "dailyReports", "monthlyReports", "exportData"] },
+    { key: "Audit", target: "logs", views: ["equipments", "stopNatures", "users", "logs", "settings"] }
+  ];
 
   const els = {
     view: document.getElementById("view"),
@@ -188,7 +207,8 @@
     document.querySelectorAll(".nav-item").forEach((button) => {
       button.addEventListener("click", () => {
         state.view = button.dataset.view;
-        document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b === button));
+        resetPagination();
+        syncNavActiveState();
         render();
       });
     });
@@ -198,22 +218,29 @@
         state.filters.section = els.section.value;
         state.filters.family = els.family.value;
         state.filters.quality = els.quality.value;
+        resetPagination();
         render();
       });
     });
 
-    els.search.addEventListener("input", () => {
-      state.filters.search = els.search.value.trim().toLowerCase();
-      if (els.globalSearch && els.globalSearch.value !== els.search.value) {
-        els.globalSearch.value = els.search.value;
-      }
+    let searchDebounce;
+    const runSearch = (value) => {
+      state.filters.search = value.trim().toLowerCase();
+      resetPagination();
       render();
-    });
+    };
+    const queueSearch = (value) => {
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => runSearch(value), 220);
+    };
 
+    els.search.addEventListener("input", () => {
+      if (els.globalSearch) els.globalSearch.value = els.search.value;
+      queueSearch(els.search.value);
+    });
     els.globalSearch?.addEventListener("input", () => {
-      state.filters.search = els.globalSearch.value.trim().toLowerCase();
-      els.search.value = els.globalSearch.value;
-      render();
+      if (els.search) els.search.value = els.globalSearch.value;
+      queueSearch(els.globalSearch.value);
     });
 
     els.globalDate?.addEventListener("change", () => {
@@ -412,12 +439,8 @@
             <p>${escapeHtml(nextAction)}</p>
           </div>
         </div>
-        <div class="process-flow" aria-label="Flux opérationnel">
-          ${workflowStep("Saisie", ["entry", "myStops"].includes(state.view))}
-          ${workflowStep("Validation", ["validation", "stopDetail"].includes(state.view))}
-          ${workflowStep("KPI", ["dashboard", "kpiDashboard", "indicators", "performance"].includes(state.view))}
-          ${workflowStep("Décision", ["pareto", "dailyReports", "monthlyReports", "exportData"].includes(state.view))}
-          ${workflowStep("Audit", ["equipments", "stopNatures", "users", "logs", "settings"].includes(state.view))}
+        <div class="process-flow" role="tablist" aria-label="Flux opérationnel">
+          ${WORKFLOW_STEPS.map((step) => workflowStep(step.key, step.views.includes(state.view), step.target)).join("")}
         </div>
         <div class="process-actions">
           <div class="ops-counters">
@@ -432,8 +455,9 @@
     bindQuickActions();
   }
 
-  function workflowStep(label, active) {
-    return `<span class="workflow-step ${active ? "active" : ""}">${escapeHtml(label)}</span>`;
+  function workflowStep(label, active, target) {
+    const targetLabel = VIEW_TITLES[target] || label;
+    return `<button type="button" class="workflow-step${active ? " active" : ""}" data-target-view="${escapeAttr(target)}" role="tab" aria-selected="${active}" title="Aller à ${escapeAttr(targetLabel)}">${escapeHtml(label)}</button>`;
   }
 
   function renderDashboard() {
@@ -707,6 +731,7 @@
     const events = getFilteredEvents();
     const byFamily = topGroups(groupSum(events, "family"), 10);
     const bySection = topGroups(groupSum(events, "sectionKey", "Non affecté"), 10);
+    const pageInfo = paginate(events, state.pagination.events, PAGE_SIZE);
 
     els.view.innerHTML = `
       <div class="metric-grid">
@@ -721,7 +746,8 @@
             <h2>Journal des arrêts</h2>
             <span class="badge">${fmtNumber(events.length, 0)} lignes</span>
           </div>
-          ${renderEventsTable(events.slice(0, 350))}
+          ${renderEventsTable(pageInfo.items)}
+          ${renderPagination("events", pageInfo)}
         </section>
         <section class="panel">
           <h2>Répartition</h2>
@@ -731,6 +757,7 @@
       </div>
     `;
 
+    bindPagination();
     requestAnimationFrame(() => {
       drawBars("events-family-chart", byFamily, { color: "#0f766e", suffix: "h" });
     });
@@ -738,17 +765,17 @@
 
   function renderMyStops() {
     const events = decorateEvents(getFilteredEvents());
-    const myEvents = events
-      .filter((event) => event.declaredBy === CURRENT_USER.name || String(event.id).startsWith("LOCAL-"))
-      .slice(0, 180);
-    const rows = myEvents.length ? myEvents : events.slice(0, 80);
-    const pending = rows.filter((event) => event.status === "pending").length;
-    const validated = rows.filter((event) => event.status === "validated").length;
-    const rejected = rows.filter((event) => event.status === "rejected").length;
+    const myEvents = events.filter((event) => event.declaredBy === CURRENT_USER.name || String(event.id).startsWith("LOCAL-"));
+    const rows = myEvents.length ? myEvents : events;
+    const sorted = rows.slice().sort((a, b) => new Date(b.start || 0) - new Date(a.start || 0));
+    const pending = sorted.filter((event) => event.status === "pending").length;
+    const validated = sorted.filter((event) => event.status === "validated").length;
+    const rejected = sorted.filter((event) => event.status === "rejected").length;
+    const pageInfo = paginate(sorted, state.pagination.myStops, PAGE_SIZE);
 
     els.view.innerHTML = `
       <div class="metric-grid">
-        ${metric("Mes arrêts", fmtNumber(rows.length, 0), "Arrêts saisis ou affectés")}
+        ${metric("Mes arrêts", fmtNumber(sorted.length, 0), "Arrêts saisis ou affectés")}
         ${metric("En attente", fmtNumber(pending, 0), "À valider")}
         ${metric("Validés", fmtNumber(validated, 0), "Exploitables en synthèse")}
         ${metric("Rejetés", fmtNumber(rejected, 0), "À corriger")}
@@ -762,21 +789,23 @@
           </div>
           <button class="primary-button" type="button" data-target-view="entry">Nouvel arrêt</button>
         </div>
-        ${renderOperationalStopsTable(rows, { actions: true })}
+        ${renderOperationalStopsTable(pageInfo.items, { actions: true })}
+        ${renderPagination("myStops", pageInfo)}
       </section>
     `;
 
     bindQuickActions();
     bindStopActions();
+    bindPagination();
   }
 
   function renderCurrentStopsView() {
     const events = decorateEvents(getFilteredEvents())
       .filter((event) => event.status === "pending" || Number(event.durationHours) >= 1)
-      .sort((a, b) => (b.durationHours || 0) - (a.durationHours || 0))
-      .slice(0, 120);
+      .sort((a, b) => (b.durationHours || 0) - (a.durationHours || 0));
     const critical = events.filter((event) => Number(event.durationHours) >= 2).length;
     const totalHours = sum(events, "durationHours");
+    const pageInfo = paginate(events, state.pagination.currentStops, PAGE_SIZE);
 
     els.view.innerHTML = `
       <div class="metric-grid">
@@ -794,24 +823,31 @@
           </div>
           <span class="badge red">${fmtHours(totalHours)}</span>
         </div>
-        ${renderOperationalStopsTable(events, { actions: true, validationActions: true })}
+        ${renderOperationalStopsTable(pageInfo.items, { actions: true, validationActions: true })}
+        ${renderPagination("currentStops", pageInfo)}
       </section>
     `;
 
     bindStopActions();
+    bindPagination();
   }
 
   function renderValidation() {
     const events = decorateEvents(getFilteredEvents());
-    const pending = events.filter((event) => event.status === "pending").slice(0, 150);
+    const pending = events.filter((event) => event.status === "pending");
     const validated = events.filter((event) => event.status === "validated").length;
     const rejected = events.filter((event) => event.status === "rejected").length;
+    const today = new Date().toISOString().slice(0, 10);
+    const overrides = getValidationOverrides();
+    const validatedToday = Object.values(overrides).filter((o) => o.status === "validated" && String(o.at || "").slice(0, 10) === today).length;
+    const rejectedToday = Object.values(overrides).filter((o) => o.status === "rejected" && String(o.at || "").slice(0, 10) === today).length;
+    const pageInfo = paginate(pending, state.pagination.validation, PAGE_SIZE);
 
     els.view.innerHTML = `
       <div class="metric-grid">
         ${metric("En attente", fmtNumber(pending.length, 0), "À traiter")}
-        ${metric("Validés aujourd'hui", fmtNumber(Math.min(validated, 12), 0), "Workflow chef d'équipe")}
-        ${metric("Rejetés aujourd'hui", fmtNumber(Math.min(rejected, 5), 0), "Avec commentaire")}
+        ${metric("Validés aujourd'hui", fmtNumber(validatedToday, 0), `Total cumulé : ${fmtNumber(validated, 0)}`)}
+        ${metric("Rejetés aujourd'hui", fmtNumber(rejectedToday, 0), `Total cumulé : ${fmtNumber(rejected, 0)}`)}
         ${metric("Taux validation", fmtPct(ratio(validated, events.length || 1)), "Sur la base filtrée")}
       </div>
 
@@ -823,11 +859,13 @@
           </div>
           <span class="badge warn">${pending.length} en attente</span>
         </div>
-        ${renderOperationalStopsTable(pending, { actions: true, validationActions: true })}
+        ${renderOperationalStopsTable(pageInfo.items, { actions: true, validationActions: true })}
+        ${renderPagination("validation", pageInfo)}
       </section>
     `;
 
     bindStopActions();
+    bindPagination();
   }
 
   function renderStopDetail() {
@@ -1125,6 +1163,7 @@
 
   function renderEquipments() {
     const equipments = buildEquipmentRows();
+    const pageInfo = paginate(equipments, state.pagination.equipments, PAGE_SIZE);
     els.view.innerHTML = `
       <section class="panel">
         <div class="panel-head">
@@ -1138,7 +1177,7 @@
           <table>
             <thead><tr><th>Code</th><th>Équipement</th><th>Circuit</th><th>Arrêts</th><th>Durée</th><th>Statut</th></tr></thead>
             <tbody>
-              ${equipments.map((row) => `
+              ${pageInfo.items.map((row) => `
                 <tr>
                   <td>${escapeHtml(row.code)}</td>
                   <td>${escapeHtml(row.name)}</td>
@@ -1151,14 +1190,24 @@
             </tbody>
           </table>
         </div>
+        ${renderPagination("equipments", pageInfo)}
       </section>
     `;
     bindReferenceActions();
+    bindPagination();
   }
 
   function renderStopNatures() {
     const totals = groupSum(getFilteredEvents(), "family");
     const families = unique([...DATA.families.map((f) => f.name), ...Array.from(totals.keys())]);
+    const rows = families.map((family, index) => ({
+      family,
+      code: `NA-${String(index + 1).padStart(2, "0")}`,
+      category: stopCategory(family),
+      hours: totals.get(family) || 0,
+      examples: DATA.families.find((item) => normalize(item.name) === normalize(family))?.examples || "-"
+    }));
+    const pageInfo = paginate(rows, state.pagination.stopNatures, PAGE_SIZE);
     els.view.innerHTML = `
       <section class="panel">
         <div class="panel-head">
@@ -1172,25 +1221,24 @@
           <table>
             <thead><tr><th>Code</th><th>Libellé</th><th>Catégorie</th><th>Durée mensuelle</th><th>Exemples</th><th>Actif</th></tr></thead>
             <tbody>
-              ${families.map((family, index) => {
-                const source = DATA.families.find((item) => normalize(item.name) === normalize(family));
-                return `
-                  <tr>
-                    <td>NA-${String(index + 1).padStart(2, "0")}</td>
-                    <td>${escapeHtml(family)}</td>
-                    <td>${escapeHtml(stopCategory(family))}</td>
-                    <td>${fmtHours(totals.get(family) || 0)}</td>
-                    <td>${escapeHtml(source?.examples || "-")}</td>
-                    <td><button class="switch is-on" type="button" data-reference-toggle>Actif</button></td>
-                  </tr>
-                `;
-              }).join("")}
+              ${pageInfo.items.map((row) => `
+                <tr>
+                  <td>${escapeHtml(row.code)}</td>
+                  <td>${escapeHtml(row.family)}</td>
+                  <td>${escapeHtml(row.category)}</td>
+                  <td>${fmtHours(row.hours)}</td>
+                  <td>${escapeHtml(row.examples)}</td>
+                  <td><button class="switch is-on" type="button" data-reference-toggle>Actif</button></td>
+                </tr>
+              `).join("")}
             </tbody>
           </table>
         </div>
+        ${renderPagination("stopNatures", pageInfo)}
       </section>
     `;
     bindReferenceActions();
+    bindPagination();
   }
 
   function renderUsers() {
@@ -1286,6 +1334,7 @@
 
   function renderLogs() {
     const logs = buildLogs();
+    const pageInfo = paginate(logs, state.pagination.logs, PAGE_SIZE);
     els.view.innerHTML = `
       <section class="panel">
         <div class="panel-head">
@@ -1299,11 +1348,11 @@
           <table>
             <thead><tr><th>Date / heure</th><th>Utilisateur</th><th>Action</th><th>Détail</th><th>Objet</th></tr></thead>
             <tbody>
-              ${logs.map((log) => `
+              ${pageInfo.items.map((log) => `
                 <tr>
                   <td>${fmtDateTime(log.at)}</td>
                   <td>${escapeHtml(log.user)}</td>
-                  <td>${escapeHtml(log.action)}</td>
+                  <td><span class="badge ${actionTone(log.action)}">${escapeHtml(log.action)}</span></td>
                   <td>${escapeHtml(log.detail)}</td>
                   <td>${escapeHtml(log.objectId || "-")}</td>
                 </tr>
@@ -1311,8 +1360,19 @@
             </tbody>
           </table>
         </div>
+        ${renderPagination("logs", pageInfo)}
       </section>
     `;
+    bindPagination();
+  }
+
+  function actionTone(action) {
+    const value = String(action || "").toLowerCase();
+    if (value.includes("validation") || value.includes("validé")) return "green";
+    if (value.includes("rejet")) return "red";
+    if (value.includes("création") || value.includes("creation")) return "blue";
+    if (value.includes("export")) return "cyan";
+    return "";
   }
 
   function renderEntry() {
@@ -1842,11 +1902,102 @@
   }
 
   function bindQuickActions() {
-    document.querySelectorAll("[data-target-view]").forEach((button) => {
+    document.querySelectorAll("[data-target-view]:not([data-bound])").forEach((button) => {
+      button.dataset.bound = "1";
       button.addEventListener("click", () => {
         state.view = button.dataset.targetView;
-        document.querySelectorAll(".nav-item").forEach((nav) => nav.classList.toggle("active", nav.dataset.view === state.view));
+        resetPagination();
+        syncNavActiveState();
         render();
+      });
+    });
+  }
+
+  function syncNavActiveState() {
+    document.querySelectorAll(".nav-item").forEach((nav) => {
+      const isActive = nav.dataset.view === state.view;
+      nav.classList.toggle("active", isActive);
+      if (isActive) {
+        const group = nav.closest(".nav-group");
+        if (group && !group.open) group.open = true;
+      }
+    });
+  }
+
+  function resetPagination() {
+    Object.keys(state.pagination).forEach((key) => {
+      state.pagination[key] = 1;
+    });
+  }
+
+  function paginate(rows, page, pageSize = PAGE_SIZE) {
+    const total = rows.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const safePage = Math.min(Math.max(1, Number(page) || 1), totalPages);
+    const start = (safePage - 1) * pageSize;
+    return {
+      page: safePage,
+      totalPages,
+      total,
+      pageSize,
+      start,
+      end: Math.min(start + pageSize, total),
+      items: rows.slice(start, start + pageSize)
+    };
+  }
+
+  function buildPageNumbers(current, total) {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+    const pages = new Set([1, total, current, current - 1, current + 1, current - 2, current + 2]);
+    const filtered = Array.from(pages).filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
+    const result = [];
+    let prev = 0;
+    filtered.forEach((p) => {
+      if (p - prev > 1) result.push("…");
+      result.push(p);
+      prev = p;
+    });
+    return result;
+  }
+
+  function renderPagination(key, info) {
+    if (info.total === 0) return "";
+    const startIdx = info.total === 0 ? 0 : info.start + 1;
+    const endIdx = info.end;
+    if (info.totalPages <= 1) {
+      return `
+        <div class="pagination">
+          <span class="pagination-info">${fmtNumber(info.total, 0)} élément${info.total > 1 ? "s" : ""}</span>
+        </div>
+      `;
+    }
+    const pages = buildPageNumbers(info.page, info.totalPages);
+    return `
+      <div class="pagination">
+        <span class="pagination-info">${startIdx}-${endIdx} sur ${fmtNumber(info.total, 0)}</span>
+        <div class="pagination-controls" role="navigation" aria-label="Pagination">
+          <button class="pagination-btn" type="button" data-paginate="${escapeAttr(key)}" data-page="${info.page - 1}" ${info.page <= 1 ? "disabled" : ""} aria-label="Page précédente">‹</button>
+          ${pages.map((p) => p === "…"
+            ? `<span class="pagination-ellipsis" aria-hidden="true">…</span>`
+            : `<button class="pagination-btn${p === info.page ? " is-active" : ""}" type="button" data-paginate="${escapeAttr(key)}" data-page="${p}" ${p === info.page ? "aria-current=\"page\"" : ""}>${p}</button>`
+          ).join("")}
+          <button class="pagination-btn" type="button" data-paginate="${escapeAttr(key)}" data-page="${info.page + 1}" ${info.page >= info.totalPages ? "disabled" : ""} aria-label="Page suivante">›</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindPagination() {
+    document.querySelectorAll("[data-paginate]:not([data-bound])").forEach((btn) => {
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", () => {
+        const key = btn.dataset.paginate;
+        const page = Number(btn.dataset.page);
+        if (!Number.isFinite(page) || !state.pagination.hasOwnProperty(key)) return;
+        state.pagination[key] = page;
+        render();
+        const view = document.getElementById("view");
+        view?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     });
   }
@@ -1938,7 +2089,8 @@
   }
 
   function bindStopActions() {
-    document.querySelectorAll("[data-detail-id]").forEach((button) => {
+    document.querySelectorAll("[data-detail-id]:not([data-bound])").forEach((button) => {
+      button.dataset.bound = "1";
       button.addEventListener("click", () => {
         state.selectedEventId = button.dataset.detailId;
         state.view = "stopDetail";
@@ -1946,15 +2098,18 @@
         render();
       });
     });
-    document.querySelectorAll("[data-validate-id]").forEach((button) => {
+    document.querySelectorAll("[data-validate-id]:not([data-bound])").forEach((button) => {
+      button.dataset.bound = "1";
       button.addEventListener("click", () => {
         updateStopStatus(button.dataset.validateId, "validated", "Arrêt validé après contrôle.");
       });
     });
-    document.querySelectorAll("[data-reject-id]").forEach((button) => {
+    document.querySelectorAll("[data-reject-id]:not([data-bound])").forEach((button) => {
+      button.dataset.bound = "1";
       button.addEventListener("click", () => {
         const comment = prompt("Motif du rejet", "Information à corriger avant exploitation.");
-        updateStopStatus(button.dataset.rejectId, "rejected", comment || "Arrêt rejeté.");
+        if (comment === null) return;
+        updateStopStatus(button.dataset.rejectId, "rejected", comment.trim() || "Arrêt rejeté.");
       });
     });
   }
@@ -2023,9 +2178,13 @@
   }
 
   function computeMtbf(events) {
+    if (!events.length) return 0;
     const days = Math.max(getAllDays().length, 1);
-    const runningHours = days * 24 * Math.max(CHARGING_SECTIONS.length, 1) - sum(events, "durationHours");
-    return events.length ? runningHours / events.length : runningHours;
+    const availableHours = days * 24 * Math.max(CHARGING_SECTIONS.length, 1);
+    const chargingEvents = events.filter((event) => CHARGING_SECTIONS.includes(event.sectionKey));
+    const stopHours = sum(chargingEvents.length ? chargingEvents : events, "durationHours");
+    const runningHours = Math.max(0, availableHours - stopHours);
+    return runningHours / events.length;
   }
 
   function exportCard(title, body, buttonLabel, action) {
@@ -2119,7 +2278,7 @@
       current.hours += Number(event.durationHours) || 0;
       grouped.set(code, current);
     });
-    return Array.from(grouped.values()).sort((a, b) => b.hours - a.hours).slice(0, 120);
+    return Array.from(grouped.values()).sort((a, b) => b.hours - a.hours);
   }
 
   function bindReferenceActions() {
@@ -2298,7 +2457,8 @@
     form.reset();
     state.selectedEventId = newEvent.id;
     state.view = "myStops";
-    document.querySelectorAll(".nav-item").forEach((nav) => nav.classList.toggle("active", nav.dataset.view === "myStops"));
+    resetPagination();
+    syncNavActiveState();
     render();
   }
 
