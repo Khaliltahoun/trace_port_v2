@@ -29,15 +29,51 @@
   const TRS_TARGET = 0.85;
   const TRS_MAINT_TARGET = 0.80;
 
+  const CIRCUITS = [
+    { key: "CA30", role: "Circuit chargement 1", color: "#1aa872" },
+    { key: "CB30", role: "Circuit chargement 2", color: "#2563eb" },
+    { key: "CC30", role: "Circuit chargement 3", color: "#7558e0" },
+    { key: "CD30", role: "Circuit chargement 4", color: "#ea7621" }
+  ];
+  const SILOS = [
+    { key: "DA", label: "Silo DA", role: "Déchargement train · poste DA10" },
+    { key: "DB", label: "Silo DB", role: "Déchargement train · poste DB10" }
+  ];
+  const QUALITIES = ["K01", "K02", "K03", "K08", "K09s", "K10", "K12", "K20", "K62"];
+
+  const STOP_TEMPLATES = [
+    { family: "Balance", desc: "Attente balance — synchronisation pesage", typical: 60, scope: "ship" },
+    { family: "intempéries", desc: "Passage pluie — protection produit", typical: 290, scope: "global" },
+    { family: "attente accostage", desc: "Navire en attente — accostage non débuté", typical: 405, scope: "global" },
+    { family: "attente préparation", desc: "Préparation cale en cours", typical: 240, scope: "ship" },
+    { family: "Changement de cale", desc: "Mouvement portique vers nouvelle cale", typical: 45, scope: "ship" },
+    { family: "Mouvement même cale", desc: "Mouvement portique intra-cale", typical: 35, scope: "ship" },
+    { family: "Passage marée", desc: "Stop sécurité passage de marée", typical: 40, scope: "global" },
+    { family: "LTE", desc: "Limite Tonnage Embarqué — vérification douane", typical: 60, scope: "ship" },
+    { family: "Assiette", desc: "Correction d'assiette navire", typical: 75, scope: "ship" },
+    { family: "Déhalage", desc: "Déhalage navire le long du quai", typical: 30, scope: "ship" },
+    { family: "manque navire", desc: "Aucun navire à charger", typical: 240, scope: "global" },
+    { family: "stock", desc: "Manque produit en silo", typical: 180, scope: "stock" },
+    { family: "exploitation", desc: "Débit faible / surcharge ligne", typical: 30, scope: "circuit" },
+    { family: "mécanique", desc: "Intervention mécanique sur équipement", typical: 90, scope: "circuit" },
+    { family: "électrique", desc: "Défaillance électrique", typical: 60, scope: "circuit" },
+    { family: "bande", desc: "Travaux bande transporteuse", typical: 120, scope: "circuit" },
+    { family: "Alimentation du train", desc: "Alimentation rame train", typical: 90, scope: "stock" }
+  ];
+
   const VIEW_TITLES = {
     dashboard: "Centre de commandement",
-    entry: "Déclaration d'arrêt",
+    entry: "Justifier un arrêt",
     myStops: "Mes arrêts",
     currentStops: "Arrêts en cours",
     validation: "File de validation",
     pareto: "Analyse Pareto",
     performance: "Performance circuits",
     reporting: "Reporting & exports",
+    monthlySynth: "Synthèse mensuelle",
+    trains: "Trains & déchargement",
+    stocks: "Stocks & silos",
+    ships: "Navires & chargement",
     equipments: "Équipements & circuits",
     stopNatures: "Natures d'arrêt",
     users: "Utilisateurs & rôles",
@@ -58,19 +94,25 @@
     indicators: "dashboard",
     dailyReports: "reporting",
     monthlyReports: "reporting",
-    exportData: "reporting"
+    exportData: "reporting",
+    flow: "trains",
+    monthly: "monthlySynth"
   };
 
   const VIEW_META = {
-    dashboard: ["Pilotage", "Centre de commandement temps réel", "Surveiller les KPI, alertes critiques et indicateurs Smart Port", "currentStops"],
-    entry: ["Exécution", "Saisie d'incident terrain", "Capturer l'arrêt et déclencher le workflow de validation", "myStops"],
-    myStops: ["Exécution", "Suivi de mes arrêts", "Consulter le statut et corriger les arrêts rejetés", "validation"],
-    currentStops: ["Exécution", "Incidents actifs et critiques", "Prioriser les arrêts longs et déclencher la validation", "validation"],
-    validation: ["Exécution", "Contrôle qualité Chef d'équipe", "Valider ou rejeter pour fiabiliser les KPI", "dashboard"],
-    stopDetail: ["Exécution", "Fiche complète d'incident", "Consulter l'historique puis valider ou corriger", "validation"],
+    dashboard: ["Pilotage", "Centre de commandement temps réel", "Surveiller circuits, KPI et incidents critiques", "currentStops"],
+    entry: ["Workflow arrêts", "Justification horaire d'arrêt", "Saisir un arrêt et propager sur les circuits affectés", "myStops"],
+    myStops: ["Workflow arrêts", "Suivi de mes arrêts", "Consulter le statut et corriger les arrêts rejetés", "validation"],
+    currentStops: ["Workflow arrêts", "Arrêts actifs et critiques", "Prioriser les arrêts longs et déclencher la validation", "validation"],
+    validation: ["Workflow arrêts", "Contrôle Chef d'équipe", "Valider ou rejeter pour fiabiliser les KPI", "dashboard"],
+    stopDetail: ["Workflow arrêts", "Fiche complète d'incident", "Consulter l'historique puis valider ou corriger", "validation"],
     performance: ["Pilotage", "Performance des circuits manutention", "Identifier les circuits sous objectif", "pareto"],
     pareto: ["Pilotage", "Diagnostic des causes racines", "Prioriser les leviers d'amélioration", "reporting"],
-    reporting: ["Reporting", "Diffusion & extractions contrôlées", "Générer la liasse opérationnelle attendue par les services", "logs"],
+    reporting: ["Reporting", "Diffusion & extractions contrôlées", "Générer la liasse opérationnelle attendue par les services", "monthlySynth"],
+    monthlySynth: ["Reporting", "Synthèse mensuelle officielle", "Consolider le bilan livré à la direction en fin de mois", "reporting"],
+    trains: ["Chaîne logistique", "Trains & déchargement", "Suivre l'arrivée des trains et l'alimentation des silos", "stocks"],
+    stocks: ["Chaîne logistique", "Stocks & silos", "Visualiser la circulation produit entre silos DA/DB", "ships"],
+    ships: ["Chaîne logistique", "Navires & chargement", "Piloter le chargement, les peseuses et l'écart connaissement", "entry"],
     equipments: ["Gouvernance", "Référentiel équipements & circuits", "Maintenir la cartographie industrielle", "stopNatures"],
     stopNatures: ["Gouvernance", "Référentiel natures d'arrêt", "Normaliser les familles de causes", "users"],
     users: ["Gouvernance", "Utilisateurs & RBAC", "Gérer les rôles et permissions", "logs"],
@@ -79,8 +121,8 @@
   };
 
   const VIEWS_WITH_FILTERS = new Set(["dashboard", "myStops", "currentStops", "validation", "pareto", "performance", "events"]);
-  const VIEWS_WITH_EXPORTS = new Set(["dashboard", "myStops", "currentStops", "validation", "pareto", "performance", "events", "reporting"]);
-  const VIEWS_WITH_PERIOD = new Set(["dashboard", "reporting", "pareto", "performance"]);
+  const VIEWS_WITH_EXPORTS = new Set(["dashboard", "myStops", "currentStops", "validation", "pareto", "performance", "events", "reporting", "monthlySynth", "trains", "ships"]);
+  const VIEWS_WITH_PERIOD = new Set(["dashboard", "reporting", "pareto", "performance", "monthlySynth", "trains", "ships", "stocks"]);
   const CHARGING_SECTIONS = ["CA30", "CB30", "CC30", "CD30"];
   const DISCHARGE_SECTIONS = ["DA10", "DB10"];
   const USERS = [
@@ -247,7 +289,11 @@
     layers: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 1 9l11 6 11-6-11-6Zm0 9L3 7v2l9 5 9-5V7l-9 5Zm0 4L3 11v2l9 5 9-5v-2l-9 5Z" fill="currentColor"/></svg>',
     users: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-3 0-9 1.5-9 4.5V21h18v-2.5C18 15.5 12 14 9 14Zm9.5-1c2 0 5.5 1 5.5 3v2h-5v-2c0-1.5-.5-2.4-1.5-3.4.3-.4.6-.4 1-.6Zm-.5-3a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" fill="currentColor"/></svg>',
     audit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm-2 6h-4V7h4v2Zm0 4h-4v-2h4v2Zm0 4h-4v-2h4v2ZM7 7h4v10H7V7Z" fill="currentColor"/></svg>',
-    settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 12.9a7 7 0 0 0 0-1.8l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.5-.9L15 4h-4l-.5 2.2c-.5.2-1 .5-1.5.9l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 1.8l-2 1.5 2 3.5 2.4-1c.5.4 1 .7 1.5.9L11 20h4l.5-2.2c.5-.2 1-.5 1.5-.9l2.4 1 2-3.5-2-1.5ZM13 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z" fill="currentColor"/></svg>'
+    settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 12.9a7 7 0 0 0 0-1.8l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.5-.9L15 4h-4l-.5 2.2c-.5.2-1 .5-1.5.9l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 1.8l-2 1.5 2 3.5 2.4-1c.5.4 1 .7 1.5.9L11 20h4l.5-2.2c.5-.2 1-.5 1.5-.9l2.4 1 2-3.5-2-1.5ZM13 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z" fill="currentColor"/></svg>',
+    train: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C7 2 4 2.6 4 7v9.5C4 18.4 5.6 20 7.5 20L6 21.5V22h12v-.5L16.5 20a3.5 3.5 0 0 0 3.5-3.5V7c0-4.4-3-5-8-5Zm-6 9V7h12v4H6Zm2.5 6a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm7 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z" fill="currentColor"/></svg>',
+    silo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10v4H7V2Zm-1 5h12l1 4v9c0 1-.5 2-1.5 2h-11C5.5 22 5 21 5 20v-9l1-4Zm2 5v6h8v-6H8Z" fill="currentColor"/></svg>',
+    ship: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14l2 5.5a3 3 0 0 0 2.8 1.9h8.4A3 3 0 0 0 19 19.5L21 14h-2v-4a2 2 0 0 0-2-2h-1V6h-8v2H7a2 2 0 0 0-2 2v4H3Zm4-4h10v3.5l-5-1.4-5 1.4V10Z" fill="currentColor"/></svg>',
+    ledger: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a4 4 0 0 1-4-4V5a2 2 0 0 1 2-2Zm0 14v0a2 2 0 0 0 2 2h10V5H5v12Zm3-9h8v2H8V8Zm0 4h8v2H8v-2Z" fill="currentColor"/></svg>'
   };
 
   const els = {
@@ -625,16 +671,18 @@
       pareto: renderParetoAnalysis,
       performance: renderPerformanceCircuits,
       reporting: renderReportingHub,
+      monthlySynth: renderMonthlySynthese,
+      trains: renderTrainsView,
+      stocks: renderStocksView,
+      ships: renderShipsView,
       equipments: renderEquipments,
       stopNatures: renderStopNatures,
       users: renderUsers,
       settings: renderSettings,
       logs: renderLogs,
       daily: renderDailySynthesis,
-      monthly: renderMonthlySynthesis,
       events: renderEvents,
       tonnage: renderTonnage,
-      flow: renderFlow,
       formulas: renderFormulas,
       dmaic: renderDmaic
     };
@@ -781,6 +829,19 @@
         ${kpiCard("MTBF", fmtHours(computeMtbf(events)), "Temps entre arrêts", "green")}
       </div>
 
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>État des circuits manutention</h2>
+            <p class="status-line">Vue temps réel par circuit : navire en cours, dernier arrêt, performance.</p>
+          </div>
+          <span class="badge cyan">CA30 · CB30 · CC30 · CD30</span>
+        </div>
+        <div class="circuit-grid">
+          ${CIRCUITS.map((circuit) => renderCircuitStatusCard(circuit, decorated, metrics)).join("")}
+        </div>
+      </section>
+
       <div class="dashboard-bottom">
         <section class="panel">
           <div class="panel-head">
@@ -905,6 +966,42 @@
           </article>
         `).join("")}
       </div>
+    `;
+  }
+
+  function renderCircuitStatusCard(circuit, decorated, metrics) {
+    const events = decorated.filter((e) => e.sectionKey === circuit.key);
+    const lastEvent = events.slice().sort((a, b) => new Date(b.end || b.start || 0) - new Date(a.end || a.start || 0))[0];
+    const stopHours = sum(events, "durationHours");
+    const dayCount = Math.max(getAllDays().length, 1);
+    const available = dayCount * 24;
+    const trs = ratio(available - stopHours, available);
+    const activeShip = lastEvent?.assignment || "—";
+    const isRunning = !lastEvent || (lastEvent.end && new Date(lastEvent.end) < new Date(Date.now() - 30 * 60 * 1000));
+    const tone = trs >= TRS_TARGET ? "ok" : trs >= TRS_TARGET - 0.05 ? "warn" : "alert";
+
+    return `
+      <article class="circuit-card tone-${tone}" style="--circuit-color:${circuit.color}">
+        <header>
+          <div class="circuit-id">
+            <span class="circuit-dot" style="background:${circuit.color}"></span>
+            <div>
+              <strong>${escapeHtml(circuit.key)}</strong>
+              <span>${escapeHtml(circuit.role)}</span>
+            </div>
+          </div>
+          <span class="circuit-status ${isRunning ? "running" : "stopped"}">${isRunning ? "En marche" : "Arrêt"}</span>
+        </header>
+        <div class="circuit-kpi">
+          <div><span>TRS</span><strong class="tone-${tone}">${fmtPct(trs)}</strong></div>
+          <div><span>Arrêts cumul</span><strong>${fmtHours(stopHours)}</strong></div>
+          <div><span>Événements</span><strong>${fmtNumber(events.length, 0)}</strong></div>
+        </div>
+        <footer>
+          <span class="circuit-ship">Navire : <strong>${escapeHtml(activeShip)}</strong></span>
+          ${lastEvent ? `<span class="circuit-last">Dernier arrêt : <strong>${escapeHtml(lastEvent.family || "—")}</strong> · ${fmtHours(lastEvent.durationHours)}</span>` : `<span class="circuit-last">Aucun arrêt</span>`}
+        </footer>
+      </article>
     `;
   }
 
@@ -1673,29 +1770,88 @@
   function renderEntry() {
     const familyOptions = unique([...DATA.families.map((f) => f.name), ...getAllEvents().map((e) => e.family).filter(Boolean)]);
     const sectionOptions = unique([...CHARGING_SECTIONS, ...DISCHARGE_SECTIONS, ...getAllEvents().map((e) => e.sectionKey).filter(Boolean)]);
-    const qualityOptions = unique([...Object.keys(DATA.tonnage[0]?.pesage || {}), ...getAllEvents().map((e) => e.quality).filter(Boolean)]);
+    const qualityOptions = unique([...QUALITIES, ...Object.keys(DATA.tonnage[0]?.pesage || {}), ...getAllEvents().map((e) => e.quality).filter(Boolean)]);
+    const ships = getAllShips();
+    const activeShips = ships.slice().sort((a, b) => new Date(b.start || 0) - new Date(a.start || 0)).slice(0, 8);
+    const shipOptions = unique([...activeShips.map((s) => s.name), ...getAllEvents().map((e) => e.assignment).filter(Boolean)]);
     const localCount = getLocalEvents().length;
+    const profile = currentUser();
 
     els.view.innerHTML = `
+      <section class="panel entry-context">
+        <div class="entry-context-head">
+          <span class="hero-eyebrow">Justification horaire d'arrêt</span>
+          <h2>Capturer l'arrêt en cours sur les circuits concernés</h2>
+          <p>Process Lean : remplacer la saisie manuelle dans le classeur Excel. Une seule saisie propage l'arrêt sur tous les circuits sélectionnés, conformément à la pratique opérationnelle (intempéries, marée, attente accostage = global, balance/LTE = par circuit).</p>
+        </div>
+        <div class="entry-context-meta">
+          <span class="meta-pill"><span class="dot dot-${profile.id}"></span>${escapeHtml(profile.role)}</span>
+          <span class="meta-pill"><strong>${localCount}</strong> saisies locales</span>
+          <span class="meta-pill"><strong>${ships.length}</strong> navires actifs</span>
+        </div>
+      </section>
+
       <section class="panel">
         <div class="panel-head">
-          <h2>Nouvel arrêt</h2>
-          <span class="badge cyan">${localCount} saisies locales</span>
+          <h2>Modèles d'arrêts courants</h2>
+          <span class="badge cyan">Cliquer pour pré-remplir le formulaire</span>
         </div>
-        <form id="event-form" class="form-grid">
-          ${fieldSelect("sectionKey", "S/E", sectionOptions)}
-          <label>Sous-équipement<input name="subEquipment" placeholder="PD10, RC134, CA30"></label>
-          ${fieldSelect("family", "Famille", familyOptions)}
-          <label>Début<input name="start" type="datetime-local" required></label>
-          <label>Fin<input name="end" type="datetime-local" required></label>
-          ${fieldSelect("quality", "Qualité", qualityOptions)}
-          <label>Affectation<input name="assignment" placeholder="Navire ou zone"></label>
-          <label>Destination<input name="destination" placeholder="Destination"></label>
-          <label>Durée calculée<input id="duration-preview" readonly value="0 h"></label>
-          <label class="full">Description<textarea name="description" placeholder="Nature de l'anomalie"></textarea></label>
-          <div class="inline-actions full">
-            <button class="primary-button" type="submit">Ajouter</button>
-            <button class="danger-button" id="clear-local" type="button">Réinitialiser les saisies locales</button>
+        <div class="template-grid">
+          ${STOP_TEMPLATES.map((tpl, i) => `
+            <button type="button" class="template-card scope-${escapeAttr(tpl.scope)}" data-template-index="${i}">
+              <span class="template-family">${escapeHtml(tpl.family)}</span>
+              <strong>${escapeHtml(tpl.desc)}</strong>
+              <span class="template-meta">~${Math.floor(tpl.typical / 60)}h${tpl.typical % 60 ? " " + (tpl.typical % 60) + "min" : ""} · scope ${escapeHtml(scopeLabel(tpl.scope))}</span>
+            </button>
+          `).join("")}
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Saisie de l'arrêt</h2>
+          <span class="badge warn">Formulaire SMQE compatible Bilan</span>
+        </div>
+        <form id="event-form" class="entry-form">
+          <fieldset class="entry-circuits">
+            <legend>Circuits affectés <em>(propagation parallèle)</em></legend>
+            <div class="circuit-toggles">
+              ${CIRCUITS.map((c) => `
+                <label class="circuit-toggle" style="--circuit-color:${c.color}">
+                  <input type="checkbox" name="circuits" value="${escapeAttr(c.key)}" checked>
+                  <span class="toggle-mark"></span>
+                  <span class="toggle-label">${escapeHtml(c.key)}</span>
+                </label>
+              `).join("")}
+              ${DISCHARGE_SECTIONS.map((c) => `
+                <label class="circuit-toggle is-discharge">
+                  <input type="checkbox" name="circuits" value="${escapeAttr(c)}">
+                  <span class="toggle-mark"></span>
+                  <span class="toggle-label">${escapeHtml(c)}</span>
+                </label>
+              `).join("")}
+            </div>
+            <p class="entry-helper">Sélectionnez plusieurs circuits pour les causes globales (intempéries, marée, manque navire). Un arrêt sera créé pour chaque circuit.</p>
+          </fieldset>
+
+          <div class="entry-grid">
+            <label>Sous-équipement<input name="subEquipment" placeholder="PD10, RC134, ..."></label>
+            ${fieldSelect("family", "Famille d'arrêt", familyOptions)}
+            <label>Début<input name="start" type="datetime-local" required></label>
+            <label>Fin<input name="end" type="datetime-local" required></label>
+            <label>Durée calculée<input id="duration-preview" readonly value="0 h"></label>
+            <label>Navire affecté
+              <input list="ship-options" name="assignment" placeholder="Sélectionner ou saisir">
+              <datalist id="ship-options">${shipOptions.map((s) => `<option value="${escapeAttr(s)}">`).join("")}</datalist>
+            </label>
+            ${fieldSelect("quality", "Qualité", qualityOptions)}
+            <label>Destination<input name="destination" placeholder="Destination produit"></label>
+            <label class="full">Description / justification<textarea name="description" placeholder="Nature de l'anomalie, action terrain entreprise" rows="3"></textarea></label>
+          </div>
+          <div class="entry-actions">
+            <button class="primary-button" type="submit">Enregistrer &amp; propager</button>
+            <button class="ghost-button" id="clear-template" type="button">Vider le formulaire</button>
+            <button class="danger-button" id="clear-local" type="button">Réinitialiser saisies locales (${localCount})</button>
           </div>
         </form>
       </section>
@@ -1705,7 +1861,7 @@
           <h2>Dernières saisies locales</h2>
           <span class="badge">${localCount}</span>
         </div>
-        ${renderEventsTable(getLocalEvents().slice().reverse())}
+        ${renderEventsTable(getLocalEvents().slice().reverse().slice(0, 20))}
       </section>
     `;
 
@@ -1719,11 +1875,57 @@
     form.elements.start.addEventListener("input", updatePreview);
     form.elements.end.addEventListener("input", updatePreview);
     form.addEventListener("submit", handleEventSubmit);
-    document.getElementById("clear-local").addEventListener("click", () => {
+
+    document.getElementById("clear-template")?.addEventListener("click", () => {
+      form.reset();
+      preview.value = "0 h";
+      form.querySelectorAll("input[name=circuits]").forEach((box) => {
+        box.checked = CHARGING_SECTIONS.includes(box.value);
+      });
+    });
+
+    document.getElementById("clear-local")?.addEventListener("click", () => {
+      if (!confirm("Effacer toutes les saisies locales ?")) return;
       saveLocalEvents([]);
       populateFilters();
+      addLog("Saisie", "local-clear", "Réinitialisation des saisies locales d'arrêts.");
       render();
     });
+
+    document.querySelectorAll("[data-template-index]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const tpl = STOP_TEMPLATES[Number(btn.dataset.templateIndex)];
+        if (!tpl) return;
+        form.elements.family.value = tpl.family;
+        form.elements.description.value = tpl.desc;
+        form.querySelectorAll("input[name=circuits]").forEach((box) => {
+          box.checked = tpl.scope === "global" ? CHARGING_SECTIONS.includes(box.value)
+            : tpl.scope === "stock" ? DISCHARGE_SECTIONS.includes(box.value)
+            : tpl.scope === "circuit" ? box.value === "CA30"
+            : CHARGING_SECTIONS.includes(box.value);
+        });
+        const now = new Date();
+        const start = new Date(now.getTime() - tpl.typical * 60 * 1000);
+        form.elements.start.value = formatLocalForInput(start);
+        form.elements.end.value = formatLocalForInput(now);
+        updatePreview();
+        form.elements.subEquipment.focus();
+      });
+    });
+  }
+
+  function scopeLabel(scope) {
+    return {
+      global: "Tous circuits",
+      circuit: "Circuit isolé",
+      ship: "Lié au navire",
+      stock: "Silos / déchargement"
+    }[scope] || scope;
+  }
+
+  function formatLocalForInput(date) {
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 
   function renderTonnage() {
@@ -1766,6 +1968,656 @@
         line: d.draftTotal || 0
       })));
     });
+  }
+
+  /* ===== Operational chain: Trains, Stocks, Ships, Synthèse mensuelle ===== */
+
+  function renderTrainsView() {
+    const trains = getAllTrains();
+    const trainTotal = sum(trains, "totalTonnage");
+    const wagons = sum(trains, "wagons");
+    const trainCadence = average(trains.map((t) => t.cadenceTph).filter(Number.isFinite));
+    const totalRetard = sum(trains, "delayHours");
+    const localCount = getLocalTrains().length;
+    const trsTrains = average(trains.map((t) => t.trsMaintenanceExploit).filter(Number.isFinite));
+    const sortedTrains = trains.slice().sort((a, b) => new Date(b.day || 0) - new Date(a.day || 0));
+    const recent = sortedTrains.slice(0, 14);
+
+    els.view.innerHTML = `
+      <section class="workflow-banner">
+        <div class="workflow-step-banner is-active">
+          <span class="banner-step-icon">1</span>
+          <div><strong>Train</strong><span>Arrivée &amp; déchargement</span></div>
+        </div>
+        <div class="banner-arrow">→</div>
+        <div class="workflow-step-banner">
+          <span class="banner-step-icon">2</span>
+          <div><strong>Silos DA / DB</strong><span>Stockage temporaire par qualité</span></div>
+        </div>
+        <div class="banner-arrow">→</div>
+        <div class="workflow-step-banner">
+          <span class="banner-step-icon">3</span>
+          <div><strong>Circuits CA-CD</strong><span>Chargement navire</span></div>
+        </div>
+        <div class="banner-arrow">→</div>
+        <div class="workflow-step-banner">
+          <span class="banner-step-icon">4</span>
+          <div><strong>Navire</strong><span>Pesage &amp; départ</span></div>
+        </div>
+      </section>
+
+      <div class="metric-grid">
+        ${metric("Trains reçus", fmtNumber(sum(trains, "trains"), 0), `${fmtNumber(wagons, 0)} wagons`)}
+        ${metric("Tonnage déchargé", `${fmtNumber(trainTotal, 0)} t`, "Cumul mois")}
+        ${metric("Cadence moyenne", `${fmtNumber(trainCadence, 0)} t/h`, "Vitesse déchargement")}
+        ${metric("Retard cumulé", fmtHours(totalRetard), `TRS chaîne ${fmtPct(trsTrains || 0)}`)}
+      </div>
+
+      <div class="two-col">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Enregistrer une arrivée train</h2>
+              <p class="status-line">Capture le déchargement et alimente la traçabilité silo.</p>
+            </div>
+            <span class="badge cyan">${localCount} saisies locales</span>
+          </div>
+          <form id="train-form" class="form-grid">
+            <label>Date arrivée<input name="day" type="date" required></label>
+            <label>Nombre de trains<input name="trains" type="number" min="1" step="1" required></label>
+            <label>Wagons<input name="wagons" type="number" min="0" step="1"></label>
+            <label>Durée déchargement (h)<input name="durationHours" type="number" min="0" step="0.01"></label>
+            <label>Tonnage silo DA (t)<input name="tonnageDA" type="number" min="0" step="0.01"></label>
+            <label>Tonnage silo DB (t)<input name="tonnageDB" type="number" min="0" step="0.01"></label>
+            <label>Bascule (t)<input name="tonnageBascule" type="number" min="0" step="0.01"></label>
+            <label>Retard (h)<input name="delayHours" type="number" min="0" step="0.01"></label>
+            <label class="wide">Observation<input name="observation" placeholder="Anomalie, semi-humide, silo cible"></label>
+            <div class="inline-actions full">
+              <button class="primary-button" type="submit">Enregistrer le train</button>
+              <button class="danger-button" id="clear-local-trains" type="button">Réinitialiser saisies locales</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Cadence de déchargement</h2>
+            <span class="badge cyan">t/h par jour</span>
+          </div>
+          <canvas id="train-cadence-chart" class="chart"></canvas>
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Journal mensuel — déchargement trains</h2>
+            <p class="status-line">Réplique de la feuille « Trains » du classeur Excel : tonnages silos, bascule, retard et cadence.</p>
+          </div>
+          <span class="badge">${recent.length} / ${trains.length} jours</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Trains</th>
+                <th>Wagons</th>
+                <th>Durée</th>
+                <th>Moyenne / train</th>
+                <th>Silo DA</th>
+                <th>Silo DB</th>
+                <th>Bascule</th>
+                <th>Total</th>
+                <th>Affectation</th>
+                <th>Retard</th>
+                <th>Cadence</th>
+                <th>TRS</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${recent.map((t) => `
+                <tr>
+                  <td>${fmtDate(t.day)}</td>
+                  <td><strong>${fmtNumber(t.trains, 0)}</strong></td>
+                  <td>${fmtNumber(t.wagons, 0)}</td>
+                  <td>${fmtHours(t.durationHours)}</td>
+                  <td>${fmtHours(t.averageHours)}</td>
+                  <td>${fmtNumber(t.tonnageDA || 0, 0)} t</td>
+                  <td>${fmtNumber(t.tonnageDB || 0, 0)} t</td>
+                  <td>${fmtNumber(t.tonnageBascule || 0, 0)} t</td>
+                  <td><strong>${fmtNumber(t.totalTonnage || 0, 0)} t</strong></td>
+                  <td>${fmtHours(t.affectationHours)}</td>
+                  <td class="${(t.delayHours || 0) > 0 ? "tone-red" : ""}">${fmtHours(t.delayHours)}</td>
+                  <td>${fmtNumber(t.cadenceTph, 0)} t/h</td>
+                  <td>${fmtPct(t.trsMaintenanceExploit || 0)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+
+    bindFlowForms({ trainOnly: true });
+    requestAnimationFrame(() => {
+      drawBars("train-cadence-chart", trains.slice(-14).map((t) => ({
+        label: dayLabel(t.day),
+        value: t.cadenceTph || 0
+      })), { color: "#1aa872", suffix: " t/h", yLabel: "Cadence (t/h)" });
+    });
+  }
+
+  function renderStocksView() {
+    const trains = getAllTrains();
+    const ships = getAllShips();
+    const stockBalance = computeStockBalance();
+    const totalIn = sum(trains, "totalTonnage");
+    const totalOut = sum(ships, "bascule");
+    const balance = totalIn - totalOut;
+    const movements = buildStockMovements().slice(0, 12);
+
+    els.view.innerHTML = `
+      <section class="workflow-banner">
+        <div class="workflow-step-banner">
+          <span class="banner-step-icon">1</span>
+          <div><strong>Train</strong><span>${fmtNumber(totalIn, 0)} t entrées</span></div>
+        </div>
+        <div class="banner-arrow">→</div>
+        <div class="workflow-step-banner is-active">
+          <span class="banner-step-icon">2</span>
+          <div><strong>Silos DA / DB</strong><span>Solde ${fmtNumber(balance, 0)} t</span></div>
+        </div>
+        <div class="banner-arrow">→</div>
+        <div class="workflow-step-banner">
+          <span class="banner-step-icon">3</span>
+          <div><strong>Circuits</strong><span>Vers chargement</span></div>
+        </div>
+        <div class="banner-arrow">→</div>
+        <div class="workflow-step-banner">
+          <span class="banner-step-icon">4</span>
+          <div><strong>Navire</strong><span>${fmtNumber(totalOut, 0)} t sorties</span></div>
+        </div>
+      </section>
+
+      <div class="metric-grid">
+        ${metric("Entrées (trains)", `${fmtNumber(totalIn, 0)} t`, "Cumul mensuel via silos DA/DB")}
+        ${metric("Sorties (navires)", `${fmtNumber(totalOut, 0)} t`, "Pesage bascule mensuel")}
+        ${metric("Solde produit", `${fmtNumber(balance, 0)} t`, balance >= 0 ? "Stock disponible" : "Déficit théorique")}
+        ${metric("Qualités actives", fmtNumber(QUALITIES.length, 0), QUALITIES.join(" · "))}
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Niveau des silos par qualité</h2>
+            <p class="status-line">Estimation entrées train moins sorties pesage. Sert au pilotage de la disponibilité produit.</p>
+          </div>
+          <span class="badge cyan">Bilan mensuel</span>
+        </div>
+        <div class="silo-grid">
+          ${SILOS.map((silo) => renderSiloCard(silo, stockBalance)).join("")}
+        </div>
+      </section>
+
+      <div class="two-col">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Flux produit par qualité</h2>
+            <span class="badge">Top entrées / sorties</span>
+          </div>
+          <div class="quality-flow">
+            ${QUALITIES.map((q) => {
+              const data = stockBalance.qualities[q] || { in: 0, out: 0 };
+              const max = Math.max(...QUALITIES.map((qq) => Math.max(stockBalance.qualities[qq]?.in || 0, stockBalance.qualities[qq]?.out || 0)), 1);
+              return `
+                <div class="quality-row">
+                  <span class="quality-tag">${escapeHtml(q)}</span>
+                  <div class="quality-bars">
+                    <div class="bar-track in"><div class="bar-fill" style="width:${(data.in / max) * 100}%"></div></div>
+                    <div class="bar-track out"><div class="bar-fill" style="width:${(data.out / max) * 100}%"></div></div>
+                  </div>
+                  <div class="quality-values">
+                    <span class="value-in">+${fmtNumber(data.in, 0)} t</span>
+                    <span class="value-out">−${fmtNumber(data.out, 0)} t</span>
+                  </div>
+                </div>
+              `;
+            }).join("")}
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Mouvements récents</h2>
+            <span class="badge cyan">Chronologique</span>
+          </div>
+          <div class="movement-list">
+            ${movements.length ? movements.map((m) => `
+              <div class="movement-item">
+                <span class="movement-icon ${m.direction === "in" ? "in" : "out"}">${m.direction === "in" ? "↓" : "↑"}</span>
+                <div>
+                  <strong>${escapeHtml(m.label)}</strong>
+                  <span class="status-line">${escapeHtml(m.detail)}</span>
+                </div>
+                <span class="movement-tonnage">${fmtNumber(m.tonnage, 0)} t</span>
+              </div>
+            `).join("") : `<div class="empty-state">Aucun mouvement enregistré.</div>`}
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  function renderSiloCard(silo, balance) {
+    const siloData = balance.silos[silo.key] || { in: 0, out: 0, qualities: {} };
+    const net = siloData.in - siloData.out;
+    const capacity = 50000;
+    const fillPct = Math.max(0, Math.min(100, (net / capacity) * 100));
+    const tone = fillPct >= 70 ? "high" : fillPct >= 30 ? "mid" : "low";
+    const topQualities = Object.entries(siloData.qualities || {})
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+
+    return `
+      <article class="silo-card tone-${tone}">
+        <header>
+          <div>
+            <span class="silo-label">${escapeHtml(silo.label)}</span>
+            <p>${escapeHtml(silo.role)}</p>
+          </div>
+          <span class="silo-tonnage">${fmtNumber(net, 0)} t</span>
+        </header>
+        <div class="silo-visual">
+          <div class="silo-cylinder">
+            <div class="silo-fill" style="height:${fillPct}%"></div>
+            <span class="silo-percent">${fmtNumber(fillPct, 0)}%</span>
+          </div>
+        </div>
+        <footer>
+          <div class="silo-flow"><span class="flow-label in">Entrée</span><strong>+${fmtNumber(siloData.in, 0)} t</strong></div>
+          <div class="silo-flow"><span class="flow-label out">Sortie</span><strong>−${fmtNumber(siloData.out, 0)} t</strong></div>
+          ${topQualities.length ? `<div class="silo-qualities">Top qualités : ${topQualities.map(([q, v]) => `<span>${escapeHtml(q)} · ${fmtNumber(v, 0)}t</span>`).join(" ")}</div>` : ""}
+        </footer>
+      </article>
+    `;
+  }
+
+  function computeStockBalance() {
+    const balance = {
+      silos: { DA: { in: 0, out: 0, qualities: {} }, DB: { in: 0, out: 0, qualities: {} } },
+      qualities: {}
+    };
+    QUALITIES.forEach((q) => { balance.qualities[q] = { in: 0, out: 0 }; });
+
+    getAllTrains().forEach((t) => {
+      const da = Number(t.tonnageDA) || 0;
+      const db = Number(t.tonnageDB) || 0;
+      balance.silos.DA.in += da;
+      balance.silos.DB.in += db;
+    });
+
+    DATA.tonnage.forEach((row) => {
+      Object.entries(row.pesage || {}).forEach(([q, v]) => {
+        if (!balance.qualities[q]) balance.qualities[q] = { in: 0, out: 0 };
+        balance.qualities[q].in += v || 0;
+      });
+    });
+
+    getAllShips().forEach((ship) => {
+      const tot = Number(ship.bascule) || 0;
+      balance.silos.DA.out += tot / 2;
+      balance.silos.DB.out += tot / 2;
+      if (ship.quality) {
+        if (!balance.qualities[ship.quality]) balance.qualities[ship.quality] = { in: 0, out: 0 };
+        balance.qualities[ship.quality].out += tot;
+        const half = tot / 2;
+        balance.silos.DA.qualities[ship.quality] = (balance.silos.DA.qualities[ship.quality] || 0) + half;
+        balance.silos.DB.qualities[ship.quality] = (balance.silos.DB.qualities[ship.quality] || 0) + half;
+      }
+    });
+
+    return balance;
+  }
+
+  function buildStockMovements() {
+    const movements = [];
+    getAllTrains().forEach((t) => {
+      if (Number(t.totalTonnage) > 0) {
+        movements.push({
+          at: t.day,
+          direction: "in",
+          label: `Train ${t.trains || 1} rame${(t.trains || 1) > 1 ? "s" : ""} → Silos`,
+          detail: `${fmtNumber(t.wagons || 0, 0)} wagons · DA ${fmtNumber(t.tonnageDA || 0, 0)} t / DB ${fmtNumber(t.tonnageDB || 0, 0)} t`,
+          tonnage: t.totalTonnage
+        });
+      }
+    });
+    getAllShips().forEach((s) => {
+      if (Number(s.bascule) > 0) {
+        movements.push({
+          at: s.start,
+          direction: "out",
+          label: `${s.name || "Navire"} (${s.quality || "—"})`,
+          detail: `Poste ${s.berth || "—"} · connaissement ${fmtNumber(s.connaissement || 0, 0)} t · écart ${fmtPct(s.gapRatio || 0)}`,
+          tonnage: s.bascule
+        });
+      }
+    });
+    return movements.sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0));
+  }
+
+  function renderShipsView() {
+    const ships = getAllShips();
+    const sorted = ships.slice().sort((a, b) => new Date(b.start || 0) - new Date(a.start || 0));
+    const totalBascule = sum(ships, "bascule");
+    const totalConnaissement = sum(ships, "connaissement");
+    const avgEcart = average(ships.map((s) => s.gapRatio).filter(Number.isFinite));
+    const activeShips = sorted.filter((s) => !s.end || new Date(s.end) > new Date()).slice(0, 4);
+    const qualityOptions = unique([...QUALITIES, ...ships.map((s) => s.quality).filter(Boolean)]);
+    const localCount = getLocalShips().length;
+
+    els.view.innerHTML = `
+      <section class="workflow-banner">
+        <div class="workflow-step-banner"><span class="banner-step-icon">1</span><div><strong>Train</strong><span>Phosphate déchargé</span></div></div>
+        <div class="banner-arrow">→</div>
+        <div class="workflow-step-banner"><span class="banner-step-icon">2</span><div><strong>Silos</strong><span>Stock par qualité</span></div></div>
+        <div class="banner-arrow">→</div>
+        <div class="workflow-step-banner"><span class="banner-step-icon">3</span><div><strong>Circuits CA-CD</strong><span>Reprise &amp; chargement</span></div></div>
+        <div class="banner-arrow">→</div>
+        <div class="workflow-step-banner is-active"><span class="banner-step-icon">4</span><div><strong>Navire</strong><span>Pesage &amp; départ</span></div></div>
+      </section>
+
+      <div class="metric-grid">
+        ${metric("Navires chargés", fmtNumber(ships.length, 0), "Cumul mensuel")}
+        ${metric("Tonnage bascule", `${fmtNumber(totalBascule, 0)} t`, "Pesage embarqué")}
+        ${metric("Connaissement", `${fmtNumber(totalConnaissement, 0)} t`, "Conformité contractuelle")}
+        ${metric("Écart moyen", fmtPct(avgEcart || 0), "Bascule vs connaissement")}
+      </div>
+
+      ${activeShips.length ? `
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Navires en cours de chargement</h2>
+            <span class="badge cyan">${activeShips.length} actif${activeShips.length > 1 ? "s" : ""}</span>
+          </div>
+          <div class="ship-cards">
+            ${activeShips.map(renderActiveShipCard).join("")}
+          </div>
+        </section>
+      ` : ""}
+
+      <div class="two-col">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Enregistrer un navire</h2>
+              <p class="status-line">Saisie complète conforme à la feuille « Navire » du classeur Excel.</p>
+            </div>
+            <span class="badge cyan">${localCount} saisies locales</span>
+          </div>
+          <form id="ship-form" class="form-grid">
+            <label>N° EC<input name="ecNumber" placeholder="Ex : 6617"></label>
+            <label>Poste<input name="berth" placeholder="66"></label>
+            <label>Navire<input name="name" placeholder="Nom du navire" required></label>
+            ${fieldSelect("quality", "Qualité", qualityOptions)}
+            <label>Début de chargement<input name="start" type="datetime-local" required></label>
+            <label>Fin de chargement<input name="end" type="datetime-local" required></label>
+            <label>Peseuse A (t)<input name="scaleA" type="number" min="0" step="0.01"></label>
+            <label>Peseuse B (t)<input name="scaleB" type="number" min="0" step="0.01"></label>
+            <label>Peseuse C (t)<input name="scaleC" type="number" min="0" step="0.01"></label>
+            <label>Peseuse D (t)<input name="scaleD" type="number" min="0" step="0.01"></label>
+            <label>Bascule totale (t)<input name="bascule" type="number" min="0" step="0.01"></label>
+            <label>Connaissement (t)<input name="connaissement" type="number" min="0" step="0.01"></label>
+            <label>Durée calculée<input id="ship-duration-preview" readonly value="0 h"></label>
+            <label class="full">Observation<textarea name="observation" placeholder="Observation chargement"></textarea></label>
+            <div class="inline-actions full">
+              <button class="primary-button" type="submit">Enregistrer navire</button>
+              <button class="danger-button" id="clear-local-ships" type="button">Réinitialiser saisies locales</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Écart connaissement vs bascule</h2>
+            <span class="badge">% par navire</span>
+          </div>
+          <canvas id="ship-gap-chart" class="chart"></canvas>
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Suivi de pesage statique mensuel</h2>
+            <p class="status-line">Réplique de la feuille « Navire » : peseuses A à D, bascule, connaissement, écart.</p>
+          </div>
+          <span class="badge">${ships.length} navires</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>N°</th><th>Poste</th><th>Navire</th><th>Qualité</th><th>N° EC</th>
+                <th>Début</th><th>Fin</th><th>Durée</th>
+                <th>Peseuse A</th><th>Peseuse B</th><th>Peseuse C</th><th>Peseuse D</th>
+                <th>Bascule</th><th>Connaissement</th><th>Écart</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${sorted.map((s) => `
+                <tr>
+                  <td>${fmtNumber(s.number || 0, 0)}</td>
+                  <td>${escapeHtml(s.berth || "—")}</td>
+                  <td><strong>${escapeHtml(s.name || "—")}</strong></td>
+                  <td><span class="badge cyan">${escapeHtml(s.quality || "—")}</span></td>
+                  <td>${escapeHtml(s.ecNumber || "—")}</td>
+                  <td>${fmtDateTime(s.start)}</td>
+                  <td>${fmtDateTime(s.end)}</td>
+                  <td>${fmtHours(s.durationHours)}</td>
+                  <td>${fmtNumber(s.scaleA || 0, 0)}</td>
+                  <td>${fmtNumber(s.scaleB || 0, 0)}</td>
+                  <td>${fmtNumber(s.scaleC || 0, 0)}</td>
+                  <td>${fmtNumber(s.scaleD || 0, 0)}</td>
+                  <td><strong>${fmtNumber(s.bascule || 0, 0)}</strong></td>
+                  <td>${fmtNumber(s.connaissement || 0, 0)}</td>
+                  <td class="${(s.gapRatio || 0) > 0.005 ? "tone-amber" : "tone-green"}">${fmtPct(s.gapRatio || 0)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+
+    bindFlowForms({ shipOnly: true });
+    requestAnimationFrame(() => {
+      drawBars("ship-gap-chart", ships.slice(-12).map((s) => ({
+        label: truncate(s.name || "—", 10),
+        value: Math.abs((s.gapRatio || 0) * 100)
+      })), { color: "#7558e0", suffix: " %", yLabel: "Écart (%)" });
+    });
+  }
+
+  function renderActiveShipCard(ship) {
+    const stops = decorateEvents(getAllEvents()).filter((e) => e.assignment === ship.name);
+    const lastStop = stops.sort((a, b) => new Date(b.end || b.start || 0) - new Date(a.end || a.start || 0))[0];
+    const gapTone = (ship.gapRatio || 0) > 0.005 ? "warn" : "ok";
+    return `
+      <article class="ship-card">
+        <header>
+          <div>
+            <strong>${escapeHtml(ship.name || "Navire")}</strong>
+            <span class="status-line">Poste ${escapeHtml(ship.berth || "—")} · qualité ${escapeHtml(ship.quality || "—")} · EC ${escapeHtml(ship.ecNumber || "—")}</span>
+          </div>
+          <span class="ship-status">En chargement</span>
+        </header>
+        <div class="ship-meta">
+          <div><span>Bascule</span><strong>${fmtNumber(ship.bascule || 0, 0)} t</strong></div>
+          <div><span>Connaissement</span><strong>${fmtNumber(ship.connaissement || 0, 0)} t</strong></div>
+          <div><span>Écart</span><strong class="tone-${gapTone}">${fmtPct(ship.gapRatio || 0)}</strong></div>
+          <div><span>Durée</span><strong>${fmtHours(ship.durationHours)}</strong></div>
+        </div>
+        ${lastStop ? `<p class="ship-last-stop">Dernier arrêt : <strong>${escapeHtml(lastStop.family || "—")}</strong> sur ${escapeHtml(lastStop.sectionKey || "—")} · ${fmtHours(lastStop.durationHours)}</p>` : ""}
+      </article>
+    `;
+  }
+
+  function renderMonthlySynthese() {
+    const events = getAnalysisEvents();
+    const metrics = computeMetrics(events);
+    const families = unique([...DATA.families.map((f) => f.name), ...events.map((e) => e.family).filter(Boolean)]);
+    const chargingMatrix = CHARGING_SECTIONS.map((sectionKey) => {
+      const row = { sectionKey, total: 0, percent: 0, families: {} };
+      families.forEach((fam) => {
+        const hours = events.filter((e) => e.sectionKey === sectionKey && e.family === fam).reduce((a, e) => a + (Number(e.durationHours) || 0), 0);
+        row.families[fam] = hours;
+        row.total += hours;
+      });
+      return row;
+    });
+    const grandTotal = chargingMatrix.reduce((a, r) => a + r.total, 0) || 1;
+    chargingMatrix.forEach((r) => { r.percent = r.total / grandTotal; });
+    const familyTotals = {};
+    families.forEach((fam) => {
+      familyTotals[fam] = chargingMatrix.reduce((a, r) => a + (r.families[fam] || 0), 0);
+    });
+    const ships = getAllShips();
+    const trains = getAllTrains();
+
+    els.view.innerHTML = `
+      <section class="document-header">
+        <div class="document-header-left">
+          <span class="doc-ref">F-QE-721-01-02 · v X · Janvier 2026</span>
+          <h2>Rapport mensuel d'activité — Manutention</h2>
+          <p>Synthèse officielle livrée à la direction · OCP Port de Casablanca</p>
+        </div>
+        <div class="document-header-right">
+          <button class="primary-button" type="button" data-report-kind="monthly" data-report-format="html">Imprimer / PDF</button>
+          <button class="ghost-button" type="button" data-report-kind="monthly" data-report-format="csv">Exporter Excel</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Chargement des navires — répartition des arrêts par S/E</h2>
+          <span class="badge">${fmtHours(grandTotal)} total</span>
+        </div>
+        <div class="table-wrap synthesis-wrap">
+          <table class="synthesis-table">
+            <thead>
+              <tr>
+                <th class="sticky">S/E</th>
+                <th>Total</th>
+                <th>%</th>
+                ${families.map((f) => `<th title="${escapeAttr(f)}">${escapeHtml(truncate(f, 14))}</th>`).join("")}
+              </tr>
+            </thead>
+            <tbody>
+              ${chargingMatrix.map((row) => `
+                <tr>
+                  <td class="sticky"><strong>${escapeHtml(row.sectionKey)}</strong></td>
+                  <td><strong>${fmtHours(row.total)}</strong></td>
+                  <td>${fmtPct(row.percent)}</td>
+                  ${families.map((f) => {
+                    const v = row.families[f] || 0;
+                    return `<td class="${v > 0 ? "has-value" : ""}">${v > 0 ? fmtHours(v) : "—"}</td>`;
+                  }).join("")}
+                </tr>
+              `).join("")}
+              <tr class="row-total">
+                <td class="sticky"><strong>Total chargement</strong></td>
+                <td><strong>${fmtHours(grandTotal)}</strong></td>
+                <td><strong>100%</strong></td>
+                ${families.map((f) => {
+                  const v = familyTotals[f] || 0;
+                  return `<td>${v > 0 ? `<strong>${fmtHours(v)}</strong>` : "—"}</td>`;
+                }).join("")}
+              </tr>
+              <tr class="row-percent">
+                <td class="sticky">% total</td>
+                <td>100%</td>
+                <td>—</td>
+                ${families.map((f) => {
+                  const v = (familyTotals[f] || 0) / grandTotal;
+                  return `<td>${v > 0 ? fmtPct(v) : "—"}</td>`;
+                }).join("")}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Indicateurs mensuels consolidés</h2>
+          <span class="badge cyan">KPI direction</span>
+        </div>
+        <div class="synthesis-kpis">
+          ${synthKpi("Tonnage Chargé 24H", `${fmtNumber(metrics.pesageTotal, 0)} t`)}
+          ${synthKpi("Tonnage Bascule", `${fmtNumber(metrics.shipBascule, 0)} t`)}
+          ${synthKpi("Connaissement", `${fmtNumber(metrics.shipConnaissement, 0)} t`)}
+          ${synthKpi("Nombre de navires", fmtNumber(ships.length, 0))}
+          ${synthKpi("Débit / h", `${fmtNumber(metrics.cadenceTph, 0)} t/h`)}
+          ${synthKpi("Cadence journalière 24h", `${fmtNumber(metrics.pesageTotal / Math.max(getAllDays().length, 1), 0)} t/j`)}
+          ${synthKpi("Heure de marche", fmtHours(metrics.runningHours))}
+          ${synthKpi("TRS exploitation", fmtPct(metrics.trsExploitation))}
+          ${synthKpi("TRS maintenance", fmtPct(metrics.trsMaintenance))}
+          ${synthKpi("TRS Global", fmtPct(metrics.trsGlobal))}
+          ${synthKpi("TRG Global", fmtPct(metrics.trgGlobal))}
+          ${synthKpi("Écart moyen", fmtPct(average(ships.map((s) => s.gapRatio).filter(Number.isFinite)) || 0))}
+        </div>
+      </section>
+
+      <div class="two-col">
+        <section class="panel">
+          <div class="panel-head"><h2>Synthèse trains</h2><span class="badge cyan">${trains.length} jours</span></div>
+          ${renderTrainsSummaryMini(trains)}
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Synthèse navires</h2><span class="badge cyan">${ships.length} navires</span></div>
+          ${renderShipsSummaryMini(ships)}
+        </section>
+      </div>
+    `;
+
+    bindReportButtons();
+  }
+
+  function synthKpi(label, value) {
+    return `<article class="synth-kpi"><span>${escapeHtml(label)}</span><strong>${value}</strong></article>`;
+  }
+
+  function renderTrainsSummaryMini(trains) {
+    const total = sum(trains, "totalTonnage");
+    const wagons = sum(trains, "wagons");
+    const delays = sum(trains, "delayHours");
+    return `
+      <div class="split-list">
+        <div class="list-row"><strong>Trains reçus</strong><span>${fmtNumber(sum(trains, "trains"), 0)}</span></div>
+        <div class="list-row"><strong>Wagons</strong><span>${fmtNumber(wagons, 0)}</span></div>
+        <div class="list-row"><strong>Tonnage total</strong><span>${fmtNumber(total, 0)} t</span></div>
+        <div class="list-row"><strong>Tonnage silo DA</strong><span>${fmtNumber(sum(trains, "tonnageDA"), 0)} t</span></div>
+        <div class="list-row"><strong>Tonnage silo DB</strong><span>${fmtNumber(sum(trains, "tonnageDB"), 0)} t</span></div>
+        <div class="list-row"><strong>Retard cumulé</strong><span>${fmtHours(delays)}</span></div>
+      </div>
+    `;
+  }
+
+  function renderShipsSummaryMini(ships) {
+    const bascule = sum(ships, "bascule");
+    const connaissement = sum(ships, "connaissement");
+    const ecart = average(ships.map((s) => s.gapRatio).filter(Number.isFinite));
+    return `
+      <div class="split-list">
+        <div class="list-row"><strong>Navires chargés</strong><span>${fmtNumber(ships.length, 0)}</span></div>
+        <div class="list-row"><strong>Tonnage bascule</strong><span>${fmtNumber(bascule, 0)} t</span></div>
+        <div class="list-row"><strong>Connaissement</strong><span>${fmtNumber(connaissement, 0)} t</span></div>
+        <div class="list-row"><strong>Écart moyen</strong><span>${fmtPct(ecart || 0)}</span></div>
+        <div class="list-row"><strong>Durée moyenne chargt</strong><span>${fmtHours(average(ships.map((s) => s.durationHours).filter(Number.isFinite)))}</span></div>
+      </div>
+    `;
   }
 
   function renderFlow() {
@@ -2727,57 +3579,79 @@
       return;
     }
 
+    const circuits = Array.from(form.querySelectorAll("input[name=circuits]:checked")).map((box) => box.value);
+    if (!circuits.length) {
+      alert("Sélectionnez au moins un circuit affecté.");
+      return;
+    }
+
     const localEvents = getLocalEvents();
-    const newEvent = {
-      id: `LOCAL-${Date.now()}`,
-      row: null,
-      declaredBy: currentUser().name,
-      status: "pending",
-      createdAt: new Date().toISOString(),
-      sectionKey: form.elements.sectionKey.value,
-      subEquipment: form.elements.subEquipment.value.trim(),
-      family: form.elements.family.value,
-      start: `${start}:00`,
-      end: `${end}:00`,
-      durationHours,
-      description: form.elements.description.value.trim(),
-      assignment: form.elements.assignment.value.trim(),
-      quality: form.elements.quality.value,
-      destination: form.elements.destination.value.trim()
-    };
-    localEvents.push(newEvent);
+    const baseTimestamp = Date.now();
+    const groupId = `GROUP-${baseTimestamp}`;
+    const created = [];
+
+    circuits.forEach((sectionKey, idx) => {
+      const newEvent = {
+        id: `LOCAL-${baseTimestamp}-${idx}`,
+        groupId,
+        row: null,
+        declaredBy: currentUser().name,
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        sectionKey,
+        subEquipment: form.elements.subEquipment.value.trim() || sectionKey,
+        family: form.elements.family.value,
+        start: `${start}:00`,
+        end: `${end}:00`,
+        durationHours,
+        description: form.elements.description.value.trim(),
+        assignment: form.elements.assignment.value.trim(),
+        quality: form.elements.quality.value,
+        destination: form.elements.destination.value.trim()
+      };
+      localEvents.push(newEvent);
+      created.push(newEvent);
+    });
+
     saveLocalEvents(localEvents);
-    addLog("Création", newEvent.id, "Nouvel arrêt créé et envoyé automatiquement au workflow de validation.");
+    addLog("Création", groupId, `${created.length} arrêt(s) ${form.elements.family.value || ""} créé(s) sur ${circuits.join(", ")} · ${fmtHours(durationHours)}.`);
     populateFilters();
     form.reset();
-    state.selectedEventId = newEvent.id;
+    state.selectedEventId = created[0]?.id;
     state.view = "myStops";
     resetPagination();
     syncNavActiveState();
     render();
   }
 
-  function bindFlowForms() {
+  function bindFlowForms(options = {}) {
     const trainForm = document.getElementById("train-form");
     const shipForm = document.getElementById("ship-form");
     const shipPreview = document.getElementById("ship-duration-preview");
 
-    trainForm.addEventListener("submit", handleTrainSubmit);
-    shipForm.addEventListener("submit", handleShipSubmit);
-    document.getElementById("clear-local-trains").addEventListener("click", () => {
-      saveLocalTrains([]);
-      renderFlow();
-    });
-    document.getElementById("clear-local-ships").addEventListener("click", () => {
-      saveLocalShips([]);
-      renderFlow();
-    });
+    if (trainForm && !options.shipOnly) {
+      trainForm.addEventListener("submit", handleTrainSubmit);
+      document.getElementById("clear-local-trains")?.addEventListener("click", () => {
+        saveLocalTrains([]);
+        render();
+      });
+    }
 
-    const updateShipPreview = () => {
-      shipPreview.value = fmtHours(hoursBetweenLocal(shipForm.elements.start.value, shipForm.elements.end.value));
-    };
-    shipForm.elements.start.addEventListener("input", updateShipPreview);
-    shipForm.elements.end.addEventListener("input", updateShipPreview);
+    if (shipForm && !options.trainOnly) {
+      shipForm.addEventListener("submit", handleShipSubmit);
+      document.getElementById("clear-local-ships")?.addEventListener("click", () => {
+        saveLocalShips([]);
+        render();
+      });
+
+      if (shipPreview) {
+        const updateShipPreview = () => {
+          shipPreview.value = fmtHours(hoursBetweenLocal(shipForm.elements.start.value, shipForm.elements.end.value));
+        };
+        shipForm.elements.start.addEventListener("input", updateShipPreview);
+        shipForm.elements.end.addEventListener("input", updateShipPreview);
+      }
+    }
   }
 
   function handleTrainSubmit(event) {
@@ -2785,32 +3659,37 @@
     const form = event.currentTarget;
     const durationHours = numberFromInput(form.elements.durationHours.value);
     const delayHours = numberFromInput(form.elements.delayHours.value);
-    const totalTonnage = numberFromInput(form.elements.totalTonnage.value);
+    const tonnageDA = numberFromInput(form.elements.tonnageDA?.value);
+    const tonnageDB = numberFromInput(form.elements.tonnageDB?.value);
+    const tonnageBascule = numberFromInput(form.elements.tonnageBascule?.value);
+    const totalTonnage = tonnageDA + tonnageDB || tonnageBascule;
+    const trainCount = numberFromInput(form.elements.trains.value);
     const affectationHours = durationHours + delayHours;
     const localTrains = getLocalTrains();
-
-    localTrains.push({
+    const newTrain = {
       id: `TRAIN-${Date.now()}`,
       day: `${form.elements.day.value}T00:00:00`,
-      trains: numberFromInput(form.elements.trains.value),
+      trains: trainCount,
       wagons: numberFromInput(form.elements.wagons.value),
       durationHours,
-      averageHours: durationHours && numberFromInput(form.elements.trains.value) ? durationHours / numberFromInput(form.elements.trains.value) : 0,
+      averageHours: durationHours && trainCount ? durationHours / trainCount : 0,
       silos: 0,
-      tonnageDA: 0,
-      tonnageDB: 0,
-      tonnageBascule: totalTonnage,
+      tonnageDA,
+      tonnageDB,
+      tonnageBascule,
       totalTonnage,
       affectationHours,
       delayHours,
       cadenceTph: durationHours ? totalTonnage / durationHours : 0,
       trsMaintenanceExploit: affectationHours ? durationHours / affectationHours : 1,
       semiWetTrains: 0,
-      observation: form.elements.observation.value.trim()
-    });
+      observation: form.elements.observation?.value.trim() || ""
+    };
 
+    localTrains.push(newTrain);
     saveLocalTrains(localTrains);
-    renderFlow();
+    addLog("Train", newTrain.id, `Arrivée train enregistrée : ${trainCount} rame(s), ${fmtNumber(totalTonnage, 0)} t.`);
+    render();
   }
 
   function handleShipSubmit(event) {
@@ -2826,8 +3705,13 @@
 
     const bascule = numberFromInput(form.elements.bascule.value);
     const connaissement = numberFromInput(form.elements.connaissement.value);
+    const scaleA = numberFromInput(form.elements.scaleA?.value);
+    const scaleB = numberFromInput(form.elements.scaleB?.value);
+    const scaleC = numberFromInput(form.elements.scaleC?.value);
+    const scaleD = numberFromInput(form.elements.scaleD?.value);
+    const computedBascule = bascule || (scaleA + scaleB + scaleC + scaleD);
     const localShips = getLocalShips();
-    localShips.push({
+    const newShip = {
       id: `SHIP-${Date.now()}`,
       number: getAllShips().length + 1,
       berth: form.elements.berth.value.trim(),
@@ -2837,18 +3721,17 @@
       start: `${start}:00`,
       end: `${end}:00`,
       durationHours,
-      scaleA: 0,
-      scaleB: 0,
-      scaleC: 0,
-      scaleD: 0,
-      bascule,
+      scaleA, scaleB, scaleC, scaleD,
+      bascule: computedBascule,
       connaissement,
-      gapRatio: connaissement ? (connaissement - bascule) / connaissement : 0,
+      gapRatio: connaissement ? (connaissement - computedBascule) / connaissement : 0,
       observation: form.elements.observation.value.trim()
-    });
+    };
 
+    localShips.push(newShip);
     saveLocalShips(localShips);
-    renderFlow();
+    addLog("Navire", newShip.id, `Navire ${newShip.name} (${newShip.quality}) enregistré · ${fmtNumber(computedBascule, 0)} t bascule.`);
+    render();
   }
 
   function renderEventsTable(events) {
