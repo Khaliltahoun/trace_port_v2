@@ -430,7 +430,6 @@
   };
 
   function init() {
-    els.dataCount.textContent = `${DATA.events.length} lignes Bilan`;
     if (!state.authenticated) {
       showLoginScreen();
       return;
@@ -599,6 +598,18 @@
     const events = getFilteredEvents();
     const hours = sum(events, "durationHours");
     els.periodSummary.innerHTML = `<strong>${escapeHtml(r.label)}</strong> · ${fmtNumber(events.length, 0)} arrêts · ${fmtHours(hours)} cumul`;
+
+    const sourceMonthEl = document.getElementById("source-month");
+    if (sourceMonthEl) sourceMonthEl.textContent = r.label;
+
+    const dataCountEl = document.getElementById("data-count");
+    if (dataCountEl) {
+      const trains = getAllTrains().filter((t) => eventInPeriod({ start: t.day })).length;
+      const ships = getAllShips().filter(isValidShip).filter((s) => eventInPeriod({ start: s.start })).length;
+      const total = events.length;
+      dataCountEl.textContent = total === 0 ? "Aucune donnée"
+        : `${fmtNumber(total, 0)} arrêts · ${fmtNumber(trains, 0)} trains · ${fmtNumber(ships, 0)} navires`;
+    }
   }
 
   function startAutoRefresh() {
@@ -995,6 +1006,7 @@
     injectProcessContext();
     updateNotificationBadge();
     paintShift();
+    paintPeriodSummary();
   }
 
   function injectProcessContext() {
@@ -1089,8 +1101,8 @@
             <span class="hero-kpi-trend ${trsDelta >= 0 ? "up" : "down"}">${trsDelta >= 0 ? "▲" : "▼"} ${fmtPct(Math.abs(trsDelta))} vs objectif</span>
           </article>
           <article class="hero-kpi">
-            <span class="hero-kpi-label">Coût de l'indisponibilité</span>
-            <strong class="hero-kpi-value">${fmtNumber(costOfDowntime, 0)} €</strong>
+            <span class="hero-kpi-label">Coût indisponibilité</span>
+            <strong class="hero-kpi-value" title="${fmtNumber(costOfDowntime, 0)} €">${fmtCompactEur(costOfDowntime)}</strong>
             <span class="hero-kpi-trend">${fmtNumber(COST_PER_STOP_HOUR_EUR, 0)} €/h × ${fmtHours(metrics.totalStopHours)}</span>
           </article>
           <article class="hero-kpi">
@@ -5176,7 +5188,7 @@
     const ctx = setupCanvas(canvas);
     const w = canvas.width / pixelRatio();
     const h = canvas.height / pixelRatio();
-    const pad = { left: 56, right: 26, top: 36, bottom: 60 };
+    const pad = { left: 60, right: 30, top: 52, bottom: 62 };
     const plotW = w - pad.left - pad.right;
     const plotH = h - pad.top - pad.bottom;
     const slot = plotW / rows.length;
@@ -5203,7 +5215,8 @@
         ctx.font = "800 12px Segoe UI";
         ctx.textAlign = "center";
         ctx.textBaseline = "alphabetic";
-        ctx.fillText(fmtPct(row.value), x + barW / 2, Math.max(14, y - 8));
+        const labelY = Math.max(pad.top - 4, y - 8);
+        ctx.fillText(fmtPct(row.value), x + barW / 2, labelY);
         if (index % labelStep === 0) {
           ctx.fillStyle = "#475569";
           ctx.font = "12px Segoe UI";
@@ -5582,6 +5595,16 @@
 
   function normalize(value) {
     return String(value || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function fmtCompactEur(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n === 0) return "0 €";
+    const abs = Math.abs(n);
+    if (abs >= 1e9) return `${(n / 1e9).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} Md €`;
+    if (abs >= 1e6) return `${(n / 1e6).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} M €`;
+    if (abs >= 1e3) return `${(n / 1e3).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} k €`;
+    return `${n.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} €`;
   }
 
   function fmtNumber(value, digits = 1) {
