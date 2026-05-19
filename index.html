@@ -8,7 +8,39 @@
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
-    <div class="app-shell">
+    <div class="login-shell" id="login-shell" hidden>
+      <div class="login-card">
+        <header class="login-header">
+          <div class="login-brand">
+            <span class="login-mark">
+              <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 22 L16 6 L28 22 Z" fill="#37c98b"/><path d="M4 22 L28 22 L28 26 L4 26 Z" fill="#061f3f"/></svg>
+            </span>
+            <div>
+              <strong>TRACE-PORT</strong>
+              <span>Smart Port Operations Intelligence</span>
+            </div>
+          </div>
+          <p class="login-tagline">Plateforme de transformation digitale — Direction Logistique Portuaire OCP Casablanca</p>
+        </header>
+        <div class="login-body">
+          <div class="login-illustration">
+            <svg viewBox="0 0 64 64" aria-hidden="true" class="login-person">
+              <circle cx="32" cy="20" r="9" fill="none" stroke="currentColor" stroke-width="2.5"/>
+              <path d="M14 54c1-10 9-16 18-16s17 6 18 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+            <h2>Sélectionner un profil</h2>
+            <p>Choisissez votre rôle pour accéder au poste de commandement avec les actions adaptées à vos responsabilités.</p>
+          </div>
+          <div class="login-roles" id="login-roles"></div>
+        </div>
+        <footer class="login-footer">
+          <span>Période active · <strong id="login-period">—</strong></span>
+          <span>v2.0 enterprise · production simulée</span>
+        </footer>
+      </div>
+    </div>
+
+    <div class="app-shell" id="app-shell">
       <aside class="sidebar">
         <div class="brand">
           <span class="brand-mark">
@@ -49,11 +81,10 @@
           </details>
 
           <details class="nav-group">
-            <summary>Référentiel &amp; gouvernance</summary>
-            <button class="nav-item" data-view="equipments" type="button" data-icon="hub">Équipements &amp; circuits</button>
-            <button class="nav-item" data-view="stopNatures" type="button" data-icon="layers">Natures d'arrêt</button>
+            <summary>Administration</summary>
+            <button class="nav-item" data-view="references" type="button" data-icon="hub">Référentiels</button>
             <button class="nav-item" data-view="users" type="button" data-icon="users">Utilisateurs &amp; rôles</button>
-            <button class="nav-item" data-view="logs" type="button" data-icon="audit">Traçabilité</button>
+            <button class="nav-item" data-view="logs" type="button" data-icon="audit">Logs &amp; traçabilité</button>
             <button class="nav-item" data-view="settings" type="button" data-icon="settings">Paramètres</button>
           </details>
         </nav>
@@ -109,16 +140,19 @@
 
         <section class="period-bar" id="period-bar" aria-label="Période d'analyse">
           <div class="period-bar-left">
-            <span class="period-bar-label">Période d'analyse</span>
+            <span class="period-bar-label">Période</span>
             <div class="segmented-control period-toggle" id="period-toggle" role="tablist" aria-label="Période">
               <button class="segment" data-period="today" type="button" role="tab">Aujourd'hui</button>
               <button class="segment" data-period="7d" type="button" role="tab">7 jours</button>
-              <button class="segment is-active" data-period="mtd" type="button" role="tab" aria-selected="true">Mois en cours</button>
-              <button class="segment" data-period="month" type="button" role="tab">Mois complet</button>
+              <button class="segment" data-period="mtd" type="button" role="tab">Mois en cours</button>
+              <button class="segment is-active" data-period="month" type="button" role="tab" aria-selected="true">Mois choisi</button>
+              <button class="segment" data-period="custom" type="button" role="tab">Plage</button>
             </div>
-            <label class="top-control period-custom" hidden id="period-custom-wrap">Date
-              <input id="global-date" type="date" value="2026-01-31">
-            </label>
+            <select id="month-picker" class="month-picker" aria-label="Mois sélectionné"></select>
+            <div class="range-picker" id="range-picker" hidden>
+              <label>Du<input id="range-from" type="date"></label>
+              <label>Au<input id="range-to" type="date"></label>
+            </div>
             <span class="period-summary" id="period-summary">—</span>
           </div>
           <div class="period-bar-right">

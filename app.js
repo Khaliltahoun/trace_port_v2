@@ -10,19 +10,19 @@
   const PROFILE_KEY = "trace-port-active-profile-v1";
 
   const PROFILES = [
-    { id: "responsable", name: "El Houdzi Israa", role: "Responsable DLP", initials: "EH", scope: "Vue consolidée toutes couches", defaultView: "dashboard", color: "#0b315f" },
-    { id: "superviseur", name: "Khadija Saidi", role: "Superviseur Maintenance", initials: "KS", scope: "Pilotage KPI, performance, alertes critiques", defaultView: "dashboard", color: "#7c5ce6" },
-    { id: "chef", name: "Youssef El Amrani", role: "Chef d'équipe Exploitation", initials: "YE", scope: "Validation des arrêts et coordination quart", defaultView: "validation", color: "#0f766e" },
-    { id: "agent", name: "Ahmed Benali", role: "Agent de quart", initials: "AB", scope: "Saisie des arrêts et suivi de ses incidents", defaultView: "entry", color: "#1d4ed8" },
-    { id: "admin", name: "Omar Lahbabi", role: "Administrateur Système", initials: "OL", scope: "Référentiels, RBAC, configuration et audit", defaultView: "logs", color: "#dc2626" }
+    { id: "agent", name: "Ahmed Benali", role: "Agent de quart", initials: "AB", scope: "Saisie des arrêts et suivi des incidents terrain", defaultView: "entry", color: "#1d4ed8" },
+    { id: "chef", name: "Youssef El Amrani", role: "Chef d'équipe", initials: "YE", scope: "Validation des arrêts et coordination quart", defaultView: "validation", color: "#0f766e" },
+    { id: "manutention", name: "El Houdzi Israa", role: "Responsable manutention", initials: "EH", scope: "Pilotage temps réel de l'exploitation manutention", defaultView: "dashboard", color: "#0b315f" },
+    { id: "performance", name: "Khadija Saidi", role: "Responsable performance", initials: "KS", scope: "Analyse KPI, Pareto, performance circuits, alertes", defaultView: "performance", color: "#7c5ce6" },
+    { id: "admin", name: "Omar Lahbabi", role: "Administrateur", initials: "OL", scope: "Référentiels, RBAC, configuration et audit", defaultView: "logs", color: "#dc2626" }
   ];
 
   const ROLE_PERMISSIONS = {
-    Responsable: { canValidate: false, canCreate: false, focus: "executive" },
-    "Superviseur Maintenance": { canValidate: true, canCreate: false, focus: "performance" },
-    "Chef d'équipe Exploitation": { canValidate: true, canCreate: true, focus: "validation" },
     "Agent de quart": { canValidate: false, canCreate: true, focus: "execution" },
-    "Administrateur Système": { canValidate: true, canCreate: true, focus: "governance" }
+    "Chef d'équipe": { canValidate: true, canCreate: true, focus: "validation" },
+    "Responsable manutention": { canValidate: true, canCreate: false, focus: "operations" },
+    "Responsable performance": { canValidate: false, canCreate: false, focus: "performance" },
+    "Administrateur": { canValidate: true, canCreate: true, focus: "governance" }
   };
 
   const COST_PER_STOP_HOUR_EUR = 3850;
@@ -74,11 +74,12 @@
     trains: "Trains & déchargement",
     stocks: "Stocks & silos",
     ships: "Navires & chargement",
+    references: "Référentiels",
     equipments: "Équipements & circuits",
     stopNatures: "Natures d'arrêt",
     users: "Utilisateurs & rôles",
     settings: "Paramètres plateforme",
-    logs: "Traçabilité opérationnelle",
+    logs: "Logs & traçabilité",
     stopDetail: "Fiche incident",
     daily: "Synthèse journalière",
     monthly: "Synthèse mensuelle",
@@ -113,11 +114,12 @@
     trains: ["Chaîne logistique", "Trains & déchargement", "Suivre l'arrivée des trains et l'alimentation des silos", "stocks"],
     stocks: ["Chaîne logistique", "Stocks & silos", "Visualiser la circulation produit entre silos DA/DB", "ships"],
     ships: ["Chaîne logistique", "Navires & chargement", "Piloter le chargement, les peseuses et l'écart connaissement", "entry"],
-    equipments: ["Gouvernance", "Référentiel équipements & circuits", "Maintenir la cartographie industrielle", "stopNatures"],
-    stopNatures: ["Gouvernance", "Référentiel natures d'arrêt", "Normaliser les familles de causes", "users"],
-    users: ["Gouvernance", "Utilisateurs & RBAC", "Gérer les rôles et permissions", "logs"],
-    logs: ["Gouvernance", "Audit & traçabilité", "Contrôler les actions sensibles", "settings"],
-    settings: ["Gouvernance", "Configuration plateforme", "Piloter les paramètres système", "dashboard"]
+    references: ["Administration", "Référentiels industriels", "Maintenir équipements, circuits et natures d'arrêt", "users"],
+    equipments: ["Administration", "Référentiel équipements & circuits", "Maintenir la cartographie industrielle", "stopNatures"],
+    stopNatures: ["Administration", "Référentiel natures d'arrêt", "Normaliser les familles de causes", "users"],
+    users: ["Administration", "Utilisateurs & RBAC", "Gérer les rôles et permissions", "logs"],
+    logs: ["Administration", "Logs & traçabilité", "Contrôler les actions sensibles", "settings"],
+    settings: ["Administration", "Configuration plateforme", "Piloter les paramètres système", "dashboard"]
   };
 
   const VIEWS_WITH_FILTERS = new Set(["dashboard", "myStops", "currentStops", "validation", "pareto", "performance", "events"]);
@@ -218,14 +220,33 @@
 
   const PAGE_SIZE = 20;
   const AUTO_REFRESH_MS = 30000;
-  const MONTH_REFERENCE = new Date("2026-01-15T12:00:00");
-  const MONTH_END_REFERENCE = new Date("2026-01-31T23:59:59");
+  const MONTH_NAMES = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+
+  function datasetMonthKey() {
+    // Derive default selected month from the dataset's most populated month
+    const counts = new Map();
+    (DATA?.events || []).forEach((e) => {
+      const ts = e.start || e.end;
+      if (!ts) return;
+      const k = String(ts).slice(0, 7);
+      counts.set(k, (counts.get(k) || 0) + 1);
+    });
+    let best = "2026-01";
+    let max = 0;
+    for (const [k, v] of counts.entries()) {
+      if (v > max) { max = v; best = k; }
+    }
+    return best;
+  }
 
   const state = {
     view: "dashboard",
     profile: loadProfile(),
-    period: "mtd",
-    customDate: "2026-01-31",
+    authenticated: loadAuthFlag(),
+    period: "month",
+    selectedMonth: localStorage.getItem("trace-port-selected-month") || datasetMonthKey(),
+    customFrom: "",
+    customTo: "",
     filters: {
       section: "all",
       family: "all",
@@ -251,31 +272,44 @@
     }
   };
 
+  function loadAuthFlag() {
+    try { return localStorage.getItem("trace-port-auth-v1") === "true"; } catch { return false; }
+  }
+
+  function saveAuthFlag(value) {
+    try { localStorage.setItem("trace-port-auth-v1", value ? "true" : "false"); } catch {}
+  }
+
+  function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+  function endOfDay(d) { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; }
+
   function periodRange() {
-    // Reference month: January 2026 (the dataset). For the demo, we anchor "today" to the dataset's mid-point so periods always cover real data.
-    const today = MONTH_REFERENCE;
+    const now = new Date();
     const range = { from: null, to: null, label: "" };
     if (state.period === "today") {
-      const d = state.customDate ? new Date(`${state.customDate}T00:00:00`) : today;
-      const start = new Date(d); start.setHours(0, 0, 0, 0);
-      const end = new Date(d); end.setHours(23, 59, 59, 999);
-      range.from = start; range.to = end; range.label = `Journée du ${start.toLocaleDateString("fr-FR")}`;
+      const today = startOfDay(now);
+      range.from = today; range.to = endOfDay(now);
+      range.label = `Aujourd'hui · ${today.toLocaleDateString("fr-FR")}`;
     } else if (state.period === "7d") {
-      const end = today;
-      const start = new Date(today); start.setDate(start.getDate() - 6); start.setHours(0, 0, 0, 0);
-      range.from = start; range.to = end; range.label = "7 derniers jours";
+      const end = endOfDay(now);
+      const start = startOfDay(new Date(now.getTime() - 6 * 86400000));
+      range.from = start; range.to = end;
+      range.label = "7 derniers jours";
     } else if (state.period === "mtd") {
-      const start = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0);
-      range.from = start; range.to = today; range.label = `Mois en cours · ${start.toLocaleString("fr-FR", { month: "long" })} ${start.getFullYear()}`;
-    } else if (state.period === "custom") {
-      const d = state.customDate ? new Date(`${state.customDate}T00:00:00`) : today;
-      const start = new Date(d); start.setHours(0, 0, 0, 0);
-      const end = new Date(d); end.setHours(23, 59, 59, 999);
-      range.from = start; range.to = end; range.label = `Date personnalisée · ${start.toLocaleDateString("fr-FR")}`;
+      const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+      range.from = start; range.to = endOfDay(now);
+      range.label = `Mois en cours · ${MONTH_NAMES[start.getMonth()]} ${start.getFullYear()}`;
+    } else if (state.period === "custom" && state.customFrom && state.customTo) {
+      range.from = startOfDay(new Date(`${state.customFrom}T00:00:00`));
+      range.to = endOfDay(new Date(`${state.customTo}T00:00:00`));
+      range.label = `Du ${range.from.toLocaleDateString("fr-FR")} au ${range.to.toLocaleDateString("fr-FR")}`;
     } else {
-      const start = new Date(today.getFullYear(), today.getMonth(), 1);
-      const end = MONTH_END_REFERENCE;
-      range.from = start; range.to = end; range.label = `${start.toLocaleString("fr-FR", { month: "long" })} ${start.getFullYear()} complet`;
+      const [y, m] = (state.selectedMonth || datasetMonthKey()).split("-").map(Number);
+      const monthIdx = (m || 1) - 1;
+      const start = new Date(y, monthIdx, 1, 0, 0, 0);
+      const end = new Date(y, monthIdx + 1, 0, 23, 59, 59);
+      range.from = start; range.to = end;
+      range.label = `${MONTH_NAMES[monthIdx]} ${y} complet`;
     }
     return range;
   }
@@ -303,6 +337,12 @@
     const ts = new Date(event.start || event.end || event.day || 0).getTime();
     if (!Number.isFinite(ts) || ts === 0) return false;
     return ts >= r.from.getTime() && ts <= r.to.getTime();
+  }
+
+  function hasDataForPeriod() {
+    return getFilteredEvents().length > 0
+      || getAllShips().some((s) => s.name && eventInPeriod({ start: s.start }))
+      || getAllTrains().some((t) => eventInPeriod({ start: t.day }));
   }
 
   function loadProfile() {
@@ -371,7 +411,10 @@
     periodBar: document.getElementById("period-bar"),
     periodToggle: document.getElementById("period-toggle"),
     periodSummary: document.getElementById("period-summary"),
-    periodCustomWrap: document.getElementById("period-custom-wrap"),
+    monthPicker: document.getElementById("month-picker"),
+    rangePicker: document.getElementById("range-picker"),
+    rangeFrom: document.getElementById("range-from"),
+    rangeTo: document.getElementById("range-to"),
     liveIndicator: document.getElementById("live-indicator"),
     notificationCount: document.getElementById("notification-count"),
     notificationButton: document.getElementById("notification-button"),
@@ -388,6 +431,16 @@
 
   function init() {
     els.dataCount.textContent = `${DATA.events.length} lignes Bilan`;
+    if (!state.authenticated) {
+      showLoginScreen();
+      return;
+    }
+    bootApp();
+  }
+
+  function bootApp() {
+    document.getElementById("login-shell")?.setAttribute("hidden", "");
+    document.getElementById("app-shell")?.removeAttribute("hidden");
     state.view = currentUser().defaultView || "dashboard";
     paintNavIcons();
     populateFilters();
@@ -399,36 +452,145 @@
     paintPeriodSummary();
     setInterval(paintShift, 60000);
     startAutoRefresh();
+    syncNavActiveState();
     render();
+  }
+
+  function showLoginScreen() {
+    const shell = document.getElementById("login-shell");
+    const app = document.getElementById("app-shell");
+    if (!shell || !app) return;
+    shell.removeAttribute("hidden");
+    app.setAttribute("hidden", "");
+    const periodEl = document.getElementById("login-period");
+    if (periodEl) {
+      const r = periodRange();
+      periodEl.textContent = r.label;
+    }
+    const roles = document.getElementById("login-roles");
+    if (!roles) return;
+    roles.innerHTML = PROFILES.map((p) => `
+      <button type="button" class="role-card" data-login-profile="${escapeAttr(p.id)}">
+        <span class="role-avatar" style="background:${p.color}">${escapeHtml(p.initials)}</span>
+        <div class="role-body">
+          <strong>${escapeHtml(p.role)}</strong>
+          <span>${escapeHtml(p.name)}</span>
+          <p>${escapeHtml(p.scope)}</p>
+        </div>
+        <span class="role-arrow" aria-hidden="true">→</span>
+      </button>
+    `).join("");
+    roles.querySelectorAll("[data-login-profile]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const profile = PROFILES.find((p) => p.id === btn.dataset.loginProfile);
+        if (!profile) return;
+        state.profile = profile;
+        state.authenticated = true;
+        saveProfile(profile.id);
+        saveAuthFlag(true);
+        bootApp();
+      });
+    });
+  }
+
+  function logout() {
+    state.authenticated = false;
+    saveAuthFlag(false);
+    closeProfileMenu();
+    showLoginScreen();
   }
 
   function bindPeriodSelector() {
     if (!els.periodToggle) return;
+
+    populateMonthPicker();
+    syncPeriodControls();
+
     els.periodToggle.querySelectorAll("[data-period]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const period = btn.dataset.period;
         state.period = period;
-        els.periodToggle.querySelectorAll("[data-period]").forEach((b) => {
-          const active = b === btn;
-          b.classList.toggle("is-active", active);
-          b.setAttribute("aria-selected", active);
-        });
-        if (els.periodCustomWrap) {
-          els.periodCustomWrap.hidden = period !== "custom" && period !== "today";
+        if (period === "custom" && (!state.customFrom || !state.customTo)) {
+          // Pre-fill with last 30 days from real today by default
+          const today = new Date();
+          const ago = new Date(today.getTime() - 30 * 86400000);
+          state.customFrom = ago.toISOString().slice(0, 10);
+          state.customTo = today.toISOString().slice(0, 10);
         }
         resetPagination();
+        syncPeriodControls();
         paintPeriodSummary();
         render();
       });
     });
 
-    els.globalDate?.addEventListener("change", () => {
-      state.customDate = els.globalDate.value;
-      if (state.period === "custom" || state.period === "today") {
+    els.monthPicker?.addEventListener("change", () => {
+      state.selectedMonth = els.monthPicker.value;
+      try { localStorage.setItem("trace-port-selected-month", state.selectedMonth); } catch {}
+      if (state.period !== "month") {
+        state.period = "month";
+        syncPeriodControls();
+      }
+      resetPagination();
+      paintPeriodSummary();
+      render();
+    });
+
+    els.rangeFrom?.addEventListener("change", () => {
+      state.customFrom = els.rangeFrom.value;
+      if (state.period === "custom") {
+        resetPagination();
         paintPeriodSummary();
         render();
       }
     });
+    els.rangeTo?.addEventListener("change", () => {
+      state.customTo = els.rangeTo.value;
+      if (state.period === "custom") {
+        resetPagination();
+        paintPeriodSummary();
+        render();
+      }
+    });
+  }
+
+  function populateMonthPicker() {
+    if (!els.monthPicker) return;
+    // Build a list of months: dataset months + current month +/- 12 months
+    const months = new Set();
+    (DATA?.events || []).forEach((e) => {
+      const k = String(e.start || "").slice(0, 7);
+      if (k) months.add(k);
+    });
+    const now = new Date();
+    for (let i = -6; i <= 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    }
+    const sorted = Array.from(months).sort();
+    els.monthPicker.innerHTML = sorted.map((m) => {
+      const [y, mm] = m.split("-").map(Number);
+      const label = `${MONTH_NAMES[(mm || 1) - 1]} ${y}`;
+      return `<option value="${escapeAttr(m)}" ${m === state.selectedMonth ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    }).join("");
+  }
+
+  function syncPeriodControls() {
+    if (!els.periodToggle) return;
+    els.periodToggle.querySelectorAll("[data-period]").forEach((b) => {
+      const active = b.dataset.period === state.period;
+      b.classList.toggle("is-active", active);
+      b.setAttribute("aria-selected", active);
+    });
+    if (els.monthPicker) {
+      els.monthPicker.hidden = state.period !== "month";
+      els.monthPicker.value = state.selectedMonth;
+    }
+    if (els.rangePicker) {
+      els.rangePicker.hidden = state.period !== "custom";
+      if (state.customFrom && els.rangeFrom) els.rangeFrom.value = state.customFrom;
+      if (state.customTo && els.rangeTo) els.rangeTo.value = state.customTo;
+    }
   }
 
   function paintPeriodSummary() {
@@ -542,23 +704,33 @@
     if (!menu) return;
     const open = force !== undefined ? force : menu.hasAttribute("hidden");
     if (open) {
-      menu.innerHTML = PROFILES.map((profile) => `
-        <button type="button" role="menuitem" class="user-menu-item ${profile.id === state.profile.id ? "is-active" : ""}" data-profile="${escapeAttr(profile.id)}">
-          <span class="user-menu-avatar" style="background:${profile.color}">${escapeHtml(profile.initials)}</span>
+      menu.innerHTML = `
+        <span class="user-menu-section">Changer de profil</span>
+        ${PROFILES.map((profile) => `
+          <button type="button" role="menuitem" class="user-menu-item ${profile.id === state.profile.id ? "is-active" : ""}" data-profile="${escapeAttr(profile.id)}">
+            <span class="user-menu-avatar" style="background:${profile.color}">${escapeHtml(profile.initials)}</span>
+            <span class="user-menu-text">
+              <strong>${escapeHtml(profile.name)}</strong>
+              <span>${escapeHtml(profile.role)}</span>
+              <em>${escapeHtml(profile.scope)}</em>
+            </span>
+          </button>
+        `).join("")}
+        <div class="user-menu-divider"></div>
+        <button type="button" role="menuitem" class="user-menu-item user-menu-logout" data-logout>
+          <span class="user-menu-avatar" style="background:#94a3b8">↩</span>
           <span class="user-menu-text">
-            <strong>${escapeHtml(profile.name)}</strong>
-            <span>${escapeHtml(profile.role)}</span>
-            <em>${escapeHtml(profile.scope)}</em>
+            <strong>Se déconnecter</strong>
+            <span>Retour à l'écran de sélection</span>
           </span>
         </button>
-      `).join("");
+      `;
       menu.removeAttribute("hidden");
       els.userToggle?.setAttribute("aria-expanded", "true");
       menu.querySelectorAll("[data-profile]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          switchProfile(btn.dataset.profile);
-        });
+        btn.addEventListener("click", () => switchProfile(btn.dataset.profile));
       });
+      menu.querySelector("[data-logout]")?.addEventListener("click", logout);
     } else {
       menu.setAttribute("hidden", "");
       els.userToggle?.setAttribute("aria-expanded", "false");
@@ -806,6 +978,7 @@
       trains: renderTrainsView,
       stocks: renderStocksView,
       ships: renderShipsView,
+      references: renderReferencesHub,
       equipments: renderEquipments,
       stopNatures: renderStopNatures,
       users: renderUsers,
@@ -864,6 +1037,16 @@
 
   function renderCommandCenter() {
     const sourceEvents = getFilteredEvents();
+    if (sourceEvents.length === 0) {
+      els.view.innerHTML = renderPeriodEmptyState({
+        icon: "chart",
+        view: "dashboard",
+        ctaLabel: "Justifier un premier arrêt",
+        ctaTarget: "entry"
+      });
+      bindQuickActions();
+      return;
+    }
     const events = getAnalysisEvents();
     const metrics = computeMetrics(events);
     const pareto = topGroups(groupSum(events, "family"), 6);
@@ -1489,6 +1672,11 @@
 
   function renderMyStops() {
     const events = decorateEvents(getFilteredEvents());
+    if (events.length === 0) {
+      els.view.innerHTML = renderPeriodEmptyState({ icon: "stop", ctaLabel: "Créer un arrêt", ctaTarget: "entry" });
+      bindQuickActions();
+      return;
+    }
     const myEvents = events.filter((event) => event.declaredBy === currentUser().name || String(event.id).startsWith("LOCAL-"));
     const rows = myEvents.length ? myEvents : events;
     const sorted = rows.slice().sort((a, b) => new Date(b.start || 0) - new Date(a.start || 0));
@@ -1524,7 +1712,13 @@
   }
 
   function renderCurrentStopsView() {
-    const events = decorateEvents(getFilteredEvents())
+    const allEvents = decorateEvents(getFilteredEvents());
+    if (allEvents.length === 0) {
+      els.view.innerHTML = renderPeriodEmptyState({ icon: "stop", ctaLabel: "Créer un arrêt", ctaTarget: "entry" });
+      bindQuickActions();
+      return;
+    }
+    const events = allEvents
       .filter((event) => event.status === "pending" || Number(event.durationHours) >= 1)
       .sort((a, b) => (b.durationHours || 0) - (a.durationHours || 0));
     const critical = events.filter((event) => Number(event.durationHours) >= 2).length;
@@ -1558,6 +1752,11 @@
 
   function renderValidation() {
     const events = decorateEvents(getFilteredEvents());
+    if (events.length === 0) {
+      els.view.innerHTML = renderPeriodEmptyState({ icon: "stop", ctaLabel: "Créer un arrêt", ctaTarget: "entry" });
+      bindQuickActions();
+      return;
+    }
     const pending = events.filter((event) => event.status === "pending");
     const validated = events.filter((event) => event.status === "validated").length;
     const rejected = events.filter((event) => event.status === "rejected").length;
@@ -1661,6 +1860,11 @@
 
   function renderParetoAnalysis() {
     const events = getAnalysisEvents();
+    if (events.length === 0) {
+      els.view.innerHTML = renderPeriodEmptyState({ icon: "chart", ctaLabel: "Justifier un arrêt", ctaTarget: "entry" });
+      bindQuickActions();
+      return;
+    }
     const pareto = topGroups(groupSum(events, "family"), 12);
     const total = sum(events, "durationHours");
 
@@ -1880,6 +2084,119 @@
         render();
       });
     });
+  }
+
+  function renderReferencesHub() {
+    const tab = state.referencesTab === "natures" ? "natures" : "equipments";
+    const equipments = buildEquipmentRows();
+    const totals = groupSum(getFilteredEvents(), "family");
+    const families = unique([...DATA.families.map((f) => f.name), ...Array.from(totals.keys())]);
+
+    els.view.innerHTML = `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Référentiels industriels</h2>
+            <p class="status-line">Maintenance de la cartographie : équipements, circuits et familles d'arrêt utilisées par les KPI.</p>
+          </div>
+          <div class="segmented-control">
+            <button class="segment ${tab === "equipments" ? "is-active" : ""}" type="button" data-ref-tab="equipments">Équipements &amp; circuits (${equipments.length})</button>
+            <button class="segment ${tab === "natures" ? "is-active" : ""}" type="button" data-ref-tab="natures">Natures d'arrêt (${families.length})</button>
+          </div>
+        </div>
+      </section>
+      ${tab === "equipments" ? renderEquipmentsPanel(equipments) : renderStopNaturesPanel(families, totals)}
+    `;
+    document.querySelectorAll("[data-ref-tab]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.referencesTab = btn.dataset.refTab;
+        render();
+      });
+    });
+    if (tab === "equipments") bindReferenceActions();
+    else bindReferenceActions();
+    bindPagination();
+  }
+
+  function renderEquipmentsPanel(equipments) {
+    const pageInfo = paginate(equipments, state.pagination.equipments, PAGE_SIZE);
+    return `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Équipements et circuits</h2>
+            <p class="status-line">Référentiel extrait des S/E, sous-équipements et circuits.</p>
+          </div>
+          <button class="primary-button" type="button" data-reference-add="equipment">Ajouter</button>
+        </div>
+        ${equipments.length === 0 ? renderEmptyState({
+          icon: "hub",
+          title: "Aucun équipement référencé",
+          message: "Importez le référentiel ou créez le premier équipement pour démarrer la cartographie industrielle.",
+          ctaLabel: "Ajouter un équipement",
+          ctaAction: "data-reference-add=\"equipment\""
+        }) : `
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Code</th><th>Équipement</th><th>Circuit</th><th>Arrêts</th><th>Durée</th><th>Statut</th></tr></thead>
+              <tbody>
+                ${pageInfo.items.map((row) => `
+                  <tr>
+                    <td><strong>${escapeHtml(row.code)}</strong></td>
+                    <td>${escapeHtml(row.name)}</td>
+                    <td>${escapeHtml(row.circuit)}</td>
+                    <td>${fmtNumber(row.count, 0)}</td>
+                    <td>${fmtHours(row.hours)}</td>
+                    <td><span class="status-pill green">Actif</span></td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+          ${renderPagination("equipments", pageInfo)}
+        `}
+      </section>
+    `;
+  }
+
+  function renderStopNaturesPanel(families, totals) {
+    const rows = families.map((family, index) => ({
+      family,
+      code: `NA-${String(index + 1).padStart(2, "0")}`,
+      category: stopCategory(family),
+      hours: totals.get(family) || 0,
+      examples: DATA.families.find((item) => normalize(item.name) === normalize(family))?.examples || "-"
+    }));
+    const pageInfo = paginate(rows, state.pagination.stopNatures, PAGE_SIZE);
+    return `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Natures d'arrêt</h2>
+            <p class="status-line">Référentiel des familles utilisées dans les SUMIFS, le Pareto et les validations.</p>
+          </div>
+          <button class="primary-button" type="button" data-reference-add="nature">Ajouter</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Code</th><th>Libellé</th><th>Catégorie</th><th>Durée période</th><th>Exemples</th><th>Statut</th></tr></thead>
+            <tbody>
+              ${pageInfo.items.map((row) => `
+                <tr>
+                  <td><strong>${escapeHtml(row.code)}</strong></td>
+                  <td>${escapeHtml(row.family)}</td>
+                  <td>${escapeHtml(row.category)}</td>
+                  <td>${fmtHours(row.hours)}</td>
+                  <td>${escapeHtml(row.examples)}</td>
+                  <td><button class="switch is-on" type="button" data-reference-toggle>Actif</button></td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+        ${renderPagination("stopNatures", pageInfo)}
+      </section>
+    `;
   }
 
   function renderEquipments() {
@@ -2351,7 +2668,8 @@
   /* ===== Operational chain: Trains, Stocks, Ships, Synthèse mensuelle ===== */
 
   function renderTrainsView() {
-    const trains = getAllTrains();
+    const allTrains = getAllTrains();
+    const trains = allTrains.filter((t) => eventInPeriod({ start: t.day }));
     const trainTotal = sum(trains, "totalTonnage");
     const wagons = sum(trains, "wagons");
     const trainCadence = average(trains.map((t) => t.cadenceTph).filter(Number.isFinite));
@@ -2359,7 +2677,7 @@
     const localCount = getLocalTrains().length;
     const trsTrains = average(trains.map((t) => t.trsMaintenanceExploit).filter(Number.isFinite));
     const sortedTrains = trains.slice().sort((a, b) => new Date(b.day || 0) - new Date(a.day || 0));
-    const recent = sortedTrains.slice(0, 14);
+    const recent = sortedTrains.slice(0, 31);
 
     els.view.innerHTML = `
       <section class="workflow-banner">
@@ -2432,48 +2750,55 @@
             <h2>Journal mensuel — déchargement trains</h2>
             <p class="status-line">Réplique de la feuille « Trains » du classeur Excel : tonnages silos, bascule, retard et cadence.</p>
           </div>
-          <span class="badge">${recent.length} / ${trains.length} jours</span>
+          <span class="badge">${recent.length} jour${recent.length > 1 ? "s" : ""} sur la période</span>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Trains</th>
-                <th>Wagons</th>
-                <th>Durée</th>
-                <th>Moyenne / train</th>
-                <th>Silo DA</th>
-                <th>Silo DB</th>
-                <th>Bascule</th>
-                <th>Total</th>
-                <th>Affectation</th>
-                <th>Retard</th>
-                <th>Cadence</th>
-                <th>TRS</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${recent.map((t) => `
+        ${recent.length === 0 ? renderEmptyState({
+          icon: "train",
+          title: `Aucun train enregistré pour ${escapeHtml(periodRange().label)}`,
+          message: "Aucune arrivée train n'a été enregistrée sur cette période. Sélectionnez un autre mois ou saisissez la première arrivée.",
+          ctaLabel: "Enregistrer une arrivée train"
+        }) : `
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
                 <tr>
-                  <td>${fmtDate(t.day)}</td>
-                  <td><strong>${fmtNumber(t.trains, 0)}</strong></td>
-                  <td>${fmtNumber(t.wagons, 0)}</td>
-                  <td>${fmtHours(t.durationHours)}</td>
-                  <td>${fmtHours(t.averageHours)}</td>
-                  <td>${fmtNumber(t.tonnageDA || 0, 0)} t</td>
-                  <td>${fmtNumber(t.tonnageDB || 0, 0)} t</td>
-                  <td>${fmtNumber(t.tonnageBascule || 0, 0)} t</td>
-                  <td><strong>${fmtNumber(t.totalTonnage || 0, 0)} t</strong></td>
-                  <td>${fmtHours(t.affectationHours)}</td>
-                  <td class="${(t.delayHours || 0) > 0 ? "tone-red" : ""}">${fmtHours(t.delayHours)}</td>
-                  <td>${fmtNumber(t.cadenceTph, 0)} t/h</td>
-                  <td>${fmtPct(t.trsMaintenanceExploit || 0)}</td>
+                  <th>Date</th>
+                  <th>Trains</th>
+                  <th>Wagons</th>
+                  <th>Durée</th>
+                  <th>Moy. / train</th>
+                  <th>Silo DA</th>
+                  <th>Silo DB</th>
+                  <th>Bascule</th>
+                  <th>Total</th>
+                  <th>Affectation</th>
+                  <th>Retard</th>
+                  <th>Cadence</th>
+                  <th>TRS</th>
                 </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                ${recent.map((t) => `
+                  <tr>
+                    <td>${fmtDate(t.day)}</td>
+                    <td class="num"><strong>${fmtNumber(t.trains, 0)}</strong></td>
+                    <td class="num">${fmtNumber(t.wagons, 0)}</td>
+                    <td class="num">${fmtHours(t.durationHours)}</td>
+                    <td class="num">${fmtHours(t.averageHours)}</td>
+                    <td class="num">${fmtNumber(t.tonnageDA || 0, 0)} t</td>
+                    <td class="num">${fmtNumber(t.tonnageDB || 0, 0)} t</td>
+                    <td class="num">${fmtNumber(t.tonnageBascule || 0, 0)} t</td>
+                    <td class="num"><strong>${fmtNumber(t.totalTonnage || 0, 0)} t</strong></td>
+                    <td class="num">${fmtHours(t.affectationHours)}</td>
+                    <td class="num ${(t.delayHours || 0) > 0 ? "tone-red" : ""}">${fmtHours(t.delayHours)}</td>
+                    <td class="num">${fmtNumber(t.cadenceTph, 0)} t/h</td>
+                    <td class="num">${fmtPct(t.trsMaintenanceExploit || 0)}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        `}
       </section>
     `;
 
@@ -2487,13 +2812,15 @@
   }
 
   function renderStocksView() {
-    const trains = getAllTrains();
-    const ships = getAllShips();
+    const allTrains = getAllTrains();
+    const allShips = getAllShips().filter(isValidShip);
+    const trains = allTrains.filter((t) => eventInPeriod({ start: t.day }));
+    const ships = allShips.filter((s) => eventInPeriod({ start: s.start }));
     const stockBalance = computeStockBalance();
     const totalIn = sum(trains, "totalTonnage");
     const totalOut = sum(ships, "bascule");
     const balance = totalIn - totalOut;
-    const movements = buildStockMovements().slice(0, 12);
+    const movements = buildStockMovements().filter((m) => eventInPeriod({ start: m.at })).slice(0, 12);
 
     els.view.innerHTML = `
       <section class="workflow-banner">
@@ -2685,13 +3012,30 @@
     return movements.sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0));
   }
 
+  function isValidShip(ship) {
+    if (!ship) return false;
+    const name = String(ship.name || "").trim();
+    if (!name) return false;
+    // Filter out structural rows from the Excel that aren't real ships
+    if (/^(nombre navire|total|\d+)$/i.test(name)) return false;
+    if (!ship.start) return false;
+    return true;
+  }
+
   function renderShipsView() {
-    const ships = getAllShips();
+    const allShips = getAllShips().filter(isValidShip);
+    const ships = allShips.filter((s) => eventInPeriod({ start: s.start }));
     const sorted = ships.slice().sort((a, b) => new Date(b.start || 0) - new Date(a.start || 0));
     const totalBascule = sum(ships, "bascule");
     const totalConnaissement = sum(ships, "connaissement");
     const avgEcart = average(ships.map((s) => s.gapRatio).filter(Number.isFinite));
-    const activeShips = sorted.filter((s) => !s.end || new Date(s.end) > new Date()).slice(0, 4);
+    const now = Date.now();
+    const activeShips = sorted.filter((s) => {
+      if (!s.start) return false;
+      const start = new Date(s.start).getTime();
+      const end = s.end ? new Date(s.end).getTime() : Infinity;
+      return start <= now && now <= end;
+    }).slice(0, 4);
     const qualityOptions = unique([...QUALITIES, ...ships.map((s) => s.quality).filter(Boolean)]);
     const localCount = getLocalShips().length;
 
@@ -2723,7 +3067,15 @@
             ${activeShips.map(renderActiveShipCard).join("")}
           </div>
         </section>
-      ` : ""}
+      ` : `
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Navires en cours de chargement</h2>
+            <span class="badge">Temps réel</span>
+          </div>
+          <div class="status-line empty-inline">Aucun navire en cours de chargement à l'instant. Les navires actifs apparaîtront ici lorsque les chargements seront en cours.</div>
+        </section>
+      `}
 
       <div class="two-col">
         <section class="panel">
@@ -2768,44 +3120,50 @@
       <section class="panel">
         <div class="panel-head">
           <div>
-            <h2>Suivi de pesage statique mensuel</h2>
+            <h2>Suivi de pesage statique — ${escapeHtml(periodRange().label)}</h2>
             <p class="status-line">Réplique de la feuille « Navire » : peseuses A à D, bascule, connaissement, écart.</p>
           </div>
           <span class="badge">${ships.length} navires</span>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>N°</th><th>Poste</th><th>Navire</th><th>Qualité</th><th>N° EC</th>
-                <th>Début</th><th>Fin</th><th>Durée</th>
-                <th>Peseuse A</th><th>Peseuse B</th><th>Peseuse C</th><th>Peseuse D</th>
-                <th>Bascule</th><th>Connaissement</th><th>Écart</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${sorted.map((s) => `
+        ${sorted.length === 0 ? renderEmptyState({
+          icon: "ship",
+          title: "Aucun navire chargé sur cette période",
+          message: "Aucun chargement n'a été enregistré pour la période sélectionnée. Sélectionnez un autre mois ou créez le premier navire."
+        }) : `
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
                 <tr>
-                  <td>${fmtNumber(s.number || 0, 0)}</td>
-                  <td>${escapeHtml(s.berth || "—")}</td>
-                  <td><strong>${escapeHtml(s.name || "—")}</strong></td>
-                  <td><span class="badge cyan">${escapeHtml(s.quality || "—")}</span></td>
-                  <td>${escapeHtml(s.ecNumber || "—")}</td>
-                  <td>${fmtDateTime(s.start)}</td>
-                  <td>${fmtDateTime(s.end)}</td>
-                  <td>${fmtHours(s.durationHours)}</td>
-                  <td>${fmtNumber(s.scaleA || 0, 0)}</td>
-                  <td>${fmtNumber(s.scaleB || 0, 0)}</td>
-                  <td>${fmtNumber(s.scaleC || 0, 0)}</td>
-                  <td>${fmtNumber(s.scaleD || 0, 0)}</td>
-                  <td><strong>${fmtNumber(s.bascule || 0, 0)}</strong></td>
-                  <td>${fmtNumber(s.connaissement || 0, 0)}</td>
-                  <td class="${(s.gapRatio || 0) > 0.005 ? "tone-amber" : "tone-green"}">${fmtPct(s.gapRatio || 0)}</td>
+                  <th>N°</th><th>Poste</th><th>Navire</th><th>Qualité</th><th>N° EC</th>
+                  <th>Début</th><th>Fin</th><th>Durée</th>
+                  <th>Pes. A</th><th>Pes. B</th><th>Pes. C</th><th>Pes. D</th>
+                  <th>Bascule</th><th>Connaiss.</th><th>Écart</th>
                 </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                ${sorted.map((s) => `
+                  <tr>
+                    <td class="num">${fmtNumber(s.number || 0, 0)}</td>
+                    <td>${escapeHtml(s.berth || "—")}</td>
+                    <td><strong>${escapeHtml(s.name || "—")}</strong></td>
+                    <td><span class="badge cyan">${escapeHtml(s.quality || "—")}</span></td>
+                    <td>${escapeHtml(s.ecNumber || "—")}</td>
+                    <td>${fmtDateTime(s.start)}</td>
+                    <td>${fmtDateTime(s.end)}</td>
+                    <td class="num">${fmtHours(s.durationHours)}</td>
+                    <td class="num">${fmtNumber(s.scaleA || 0, 0)}</td>
+                    <td class="num">${fmtNumber(s.scaleB || 0, 0)}</td>
+                    <td class="num">${fmtNumber(s.scaleC || 0, 0)}</td>
+                    <td class="num">${fmtNumber(s.scaleD || 0, 0)}</td>
+                    <td class="num"><strong>${fmtNumber(s.bascule || 0, 0)}</strong></td>
+                    <td class="num">${fmtNumber(s.connaissement || 0, 0)}</td>
+                    <td class="num ${(s.gapRatio || 0) > 0.005 ? "tone-amber" : "tone-green"}">${fmtPct(s.gapRatio || 0)}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        `}
       </section>
     `;
 
@@ -2822,18 +3180,23 @@
     const stops = decorateEvents(getAllEvents()).filter((e) => e.assignment === ship.name);
     const lastStop = stops.sort((a, b) => new Date(b.end || b.start || 0) - new Date(a.end || a.start || 0))[0];
     const gapTone = (ship.gapRatio || 0) > 0.005 ? "warn" : "ok";
+    const subtitle = [
+      ship.berth ? `Poste ${ship.berth}` : null,
+      ship.quality ? `qualité ${ship.quality}` : null,
+      ship.ecNumber ? `EC ${ship.ecNumber}` : null
+    ].filter(Boolean).join(" · ");
     return `
       <article class="ship-card">
         <header>
           <div>
             <strong>${escapeHtml(ship.name || "Navire")}</strong>
-            <span class="status-line">Poste ${escapeHtml(ship.berth || "—")} · qualité ${escapeHtml(ship.quality || "—")} · EC ${escapeHtml(ship.ecNumber || "—")}</span>
+            <span class="status-line">${escapeHtml(subtitle || "Informations à compléter")}</span>
           </div>
           <span class="ship-status">En chargement</span>
         </header>
         <div class="ship-meta">
           <div><span>Bascule</span><strong>${fmtNumber(ship.bascule || 0, 0)} t</strong></div>
-          <div><span>Connaissement</span><strong>${fmtNumber(ship.connaissement || 0, 0)} t</strong></div>
+          <div><span>Connaiss.</span><strong>${fmtNumber(ship.connaissement || 0, 0)} t</strong></div>
           <div><span>Écart</span><strong class="tone-${gapTone}">${fmtPct(ship.gapRatio || 0)}</strong></div>
           <div><span>Durée</span><strong>${fmtHours(ship.durationHours)}</strong></div>
         </div>
@@ -3453,6 +3816,42 @@
     Object.keys(state.pagination).forEach((key) => {
       state.pagination[key] = 1;
     });
+  }
+
+  const EMPTY_ICONS = {
+    chart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V4h2v16H4Zm4 0V10h2v10H8Zm4 0v-6h2v6h-2Zm4 0V8h2v12h-2Z" fill="currentColor" opacity="0.7"/></svg>',
+    train: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C7 2 4 2.6 4 7v9.5C4 18.4 5.6 20 7.5 20L6 21.5V22h12v-.5L16.5 20a3.5 3.5 0 0 0 3.5-3.5V7c0-4.4-3-5-8-5Zm-6 9V7h12v4H6Z" fill="currentColor" opacity="0.7"/></svg>',
+    ship: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 14l2 5.5a3 3 0 0 0 2.8 1.9h8.4A3 3 0 0 0 19 19.5L21 14h-2v-4a2 2 0 0 0-2-2h-1V6h-8v2H7a2 2 0 0 0-2 2v4H3Z" fill="currentColor" opacity="0.7"/></svg>',
+    silo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10v4H7V2Zm-1 5h12l1 4v9c0 1-.5 2-1.5 2h-11C5.5 22 5 21 5 20v-9l1-4Z" fill="currentColor" opacity="0.7"/></svg>',
+    stop: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" opacity="0.7"/><path d="M8 8h8v8H8z" fill="currentColor" opacity="0.7"/></svg>',
+    hub: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a3 3 0 1 1 0 6 3 3 0 0 1 0-6Zm0 10a3 3 0 1 1 0 6 3 3 0 0 1 0-6Zm-6-6a3 3 0 1 1 0 6 3 3 0 0 1 0-6Zm12 0a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z" fill="currentColor" opacity="0.7"/></svg>',
+    report: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" fill="currentColor" opacity="0.7"/></svg>'
+  };
+
+  function renderPeriodEmptyState({ icon = "chart", view = "dashboard", ctaLabel, ctaTarget } = {}) {
+    const r = periodRange();
+    return renderEmptyState({
+      icon,
+      title: `Aucune donnée pour ${r.label}`,
+      message: "Sélectionnez une période contenant des enregistrements ou créez un premier enregistrement pour démarrer le monitoring.",
+      ctaLabel,
+      ctaTarget
+    });
+  }
+
+  function renderEmptyState({ icon = "chart", title, message, ctaLabel, ctaAction, ctaTarget } = {}) {
+    const iconSvg = EMPTY_ICONS[icon] || EMPTY_ICONS.chart;
+    const cta = ctaLabel ? (ctaTarget
+      ? `<button class="primary-button" type="button" data-target-view="${escapeAttr(ctaTarget)}">${escapeHtml(ctaLabel)}</button>`
+      : `<button class="primary-button" type="button" ${ctaAction || ""}>${escapeHtml(ctaLabel)}</button>`) : "";
+    return `
+      <div class="empty-state-card">
+        <div class="empty-state-icon">${iconSvg}</div>
+        <strong>${escapeHtml(title || "Aucune donnée disponible")}</strong>
+        <p>${escapeHtml(message || "Aucun enregistrement pour la période sélectionnée. Sélectionnez une autre période ou créez le premier enregistrement.")}</p>
+        ${cta}
+      </div>
+    `;
   }
 
   function paginate(rows, page, pageSize = PAGE_SIZE) {
