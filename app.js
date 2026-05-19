@@ -29,6 +29,146 @@
   const TRS_TARGET = 0.85;
   const TRS_MAINT_TARGET = 0.80;
 
+  /* ============================================================
+   * OFFICIAL CALCULATION ENGINE
+   * Reproduces the perimeter of the Excel "Synthèses" sheet so
+   * TRACE-PORT totals are perfectly aligned with the legacy
+   * monthly report sent to direction.
+   * ============================================================ */
+
+  // 32 canonical families matching the Synthèses!row10 headers (case + accents)
+  const OFFICIAL_FAMILIES = [
+    "exploitation", "électrique", "instrumentation", "mécanique", "bande",
+    "manque navire", "attente accostage", "attente préparation", "structure navire",
+    "Mouvement portique", "Changement de cale", "Mouvement même cale", "Passage marée",
+    "intempéries", "Assiette", "Balance", "LTE", "Déhalage", "Déballastage",
+    "Correction gîte", "Navire haut", "Sondage des ballasts", "Arrêt par le bord",
+    "Arrêt par le quai", "Forces majeurs", "stock", "arrêts planifiés",
+    "manque produit", "Alimentation du train", "Dégagement stériles",
+    "Permutation circuit", "autres externes"
+  ];
+
+  // Raw label → official family alias map (uses normalized lookup).
+  // These variants were identified by reconciliation against the actual Bilan dataset.
+  const FAMILY_ALIASES = {
+    "electrique": "électrique",
+    "éléctrique": "électrique",
+    "electrique+mecanique": "électrique",
+    "attente acostage": "attente accostage",
+    "passage pluie": "intempéries",
+    "intemperies": "intempéries",
+    "travaux planifier": "arrêts planifiés",
+    "travaux planifies": "arrêts planifiés",
+    "arrêts planifiées": "arrêts planifiés",
+    "arrets planifies": "arrêts planifiés",
+    "mecanique": "mécanique",
+    "deballastage": "Déballastage",
+    "dehalage": "Déhalage",
+    "balance": "Balance",
+    "lte": "LTE",
+    "passage maree": "Passage marée",
+    "marée": "Passage marée",
+    "assiette": "Assiette",
+    "correction gite": "Correction gîte",
+    "correction gîte": "Correction gîte",
+    "navire haut": "Navire haut",
+    "sondage": "Sondage des ballasts",
+    "sondage des ballasts": "Sondage des ballasts",
+    "arret par le bord": "Arrêt par le bord",
+    "arret par le quai": "Arrêt par le quai",
+    "forces majeurs": "Forces majeurs",
+    "force majeure": "Forces majeurs",
+    "alimentation du train": "Alimentation du train",
+    "alimentation train": "Alimentation du train",
+    "degagement steriles": "Dégagement stériles",
+    "permutation circuit": "Permutation circuit",
+    "autres externes": "autres externes",
+    "mouvement portique": "Mouvement portique",
+    "changement de cale": "Changement de cale",
+    "mouvement meme cale": "Mouvement même cale",
+    "mouvement même cale": "Mouvement même cale",
+    "manque navire": "manque navire",
+    "manque produit": "manque produit",
+    "structure navire": "structure navire",
+    "attente accostage": "attente accostage",
+    "attente préparation": "attente préparation",
+    "attente preparation": "attente préparation",
+    "stock": "stock",
+    "exploitation": "exploitation",
+    "instrumentation": "instrumentation",
+    "bande": "bande"
+  };
+
+  // Excel Synthèses!Row15 reference baseline — per-family CHARGING totals
+  // extracted from the same Janvier 2026 source workbook that built the
+  // current TRACE-PORT dataset. Stored as the immutable comparison reference
+  // so manager-level reconciliation matches Excel exactly at TRACE-PORT
+  // startup, and any divergence visible afterwards is caused by new manual
+  // entries / corrections inside TRACE-PORT.
+  const EXCEL_REFERENCE_JAN_2026 = {
+    "exploitation": 1.17,
+    "électrique": 6.08,
+    "instrumentation": 0,
+    "mécanique": 6.75,
+    "bande": 2.17,
+    "manque navire": 768.00,
+    "attente accostage": 307.17,
+    "attente préparation": 101.33,
+    "structure navire": 193.25,
+    "Mouvement portique": 0,
+    "Changement de cale": 11.75,
+    "Mouvement même cale": 11.92,
+    "Passage marée": 2.67,
+    "intempéries": 967.50,
+    "Assiette": 4.08,
+    "Balance": 31.17,
+    "LTE": 18.08,
+    "Déhalage": 0,
+    "Déballastage": 9.67,
+    "Correction gîte": 0,
+    "Navire haut": 0,
+    "Sondage des ballasts": 0,
+    "Arrêt par le bord": 2.67,
+    "Arrêt par le quai": 3.83,
+    "Forces majeurs": 0,
+    "stock": 78.92,
+    "arrêts planifiés": 170.58,
+    "manque produit": 40.00,
+    "Alimentation du train": 6.00,
+    "Dégagement stériles": 4.33,
+    "Permutation circuit": 7.08,
+    "autres externes": 0
+  };
+
+  // KPI definitions — single source of truth, used for tooltips & docs
+  const KPI_DEFINITIONS = {
+    totalStopHours: {
+      label: "Temps d'arrêt total (officiel)",
+      formula: "Σ durationHours pour événements (S/E ∈ CA30/CB30/CC30/CD30) ET famille ∈ taxonomie officielle",
+      sheet: "Synthèses!B15"
+    },
+    trsExploitation: {
+      label: "TRS Exploitation",
+      formula: "(heures dispo − arrêts exploitation) / heures dispo",
+      sheet: "Synthèses!AP20"
+    },
+    trsMaintenance: {
+      label: "TRS Maintenance",
+      formula: "(heures dispo − arrêts maintenance: électrique+instrumentation+mécanique+bande) / heures dispo",
+      sheet: "Synthèses!AQ20"
+    },
+    trsGlobal: {
+      label: "TRS Global",
+      formula: "(heures dispo − arrêts exploitation − arrêts maintenance) / heures dispo",
+      sheet: "Synthèses!AR20"
+    },
+    cadenceTph: {
+      label: "Cadence horaire (t/h)",
+      formula: "tonnage pesage / heures de marche",
+      sheet: "Synthèses!H20"
+    }
+  };
+
   const CIRCUITS = [
     { key: "CA30", role: "Circuit chargement 1", color: "#1aa872" },
     { key: "CB30", role: "Circuit chargement 2", color: "#2563eb" },
@@ -80,6 +220,7 @@
     users: "Utilisateurs & rôles",
     settings: "Paramètres plateforme",
     logs: "Logs & traçabilité",
+    reconciliation: "Réconciliation Excel",
     stopDetail: "Fiche incident",
     daily: "Synthèse journalière",
     monthly: "Synthèse mensuelle",
@@ -119,7 +260,8 @@
     stopNatures: ["Administration", "Référentiel natures d'arrêt", "Normaliser les familles de causes", "users"],
     users: ["Administration", "Utilisateurs & RBAC", "Gérer les rôles et permissions", "logs"],
     logs: ["Administration", "Logs & traçabilité", "Contrôler les actions sensibles", "settings"],
-    settings: ["Administration", "Configuration plateforme", "Piloter les paramètres système", "dashboard"]
+    settings: ["Administration", "Configuration plateforme", "Piloter les paramètres système", "dashboard"],
+    reconciliation: ["Administration", "Réconciliation Excel ↔ TRACE-PORT", "Auditer l'alignement entre la synthèse officielle et le calcul live", "logs"]
   };
 
   const VIEWS_WITH_FILTERS = new Set(["dashboard", "myStops", "currentStops", "validation", "pareto", "performance", "events"]);
@@ -246,6 +388,7 @@
     period: "month",
     selectedMonth: localStorage.getItem("trace-port-selected-month") || datasetMonthKey(),
     analysisDate: localStorage.getItem("trace-port-analysis-date") || defaultAnalysisDate(),
+    calcMode: localStorage.getItem("trace-port-calc-mode") || "official",
     customFrom: "",
     customTo: "",
     filters: {
@@ -433,6 +576,7 @@
     rangePicker: document.getElementById("range-picker"),
     rangeFrom: document.getElementById("range-from"),
     rangeTo: document.getElementById("range-to"),
+    calcModeToggle: document.getElementById("calc-mode-toggle"),
     liveIndicator: document.getElementById("live-indicator"),
     notificationCount: document.getElementById("notification-count"),
     notificationButton: document.getElementById("notification-button"),
@@ -464,6 +608,7 @@
     bindShell();
     bindShellShortcuts();
     bindPeriodSelector();
+    syncCalcModeControls();
     paintShift();
     paintProfile();
     paintPeriodSummary();
@@ -578,6 +723,16 @@
         render();
       }
     });
+
+    els.calcModeToggle?.querySelectorAll("[data-calc-mode]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.calcMode = btn.dataset.calcMode;
+        try { localStorage.setItem("trace-port-calc-mode", state.calcMode); } catch {}
+        syncCalcModeControls();
+        addLog("Mode de calcul", state.calcMode, `Mode de calcul changé en « ${state.calcMode === "official" ? "Officiel Excel" : "Brut opérationnel"} ».`);
+        render();
+      });
+    });
     els.rangeTo?.addEventListener("change", () => {
       state.customTo = els.rangeTo.value;
       if (state.period === "custom") {
@@ -607,6 +762,15 @@
       const label = `${MONTH_NAMES[(mm || 1) - 1]} ${y}`;
       return `<option value="${escapeAttr(m)}" ${m === state.selectedMonth ? "selected" : ""}>${escapeHtml(label)}</option>`;
     }).join("");
+  }
+
+  function syncCalcModeControls() {
+    if (!els.calcModeToggle) return;
+    els.calcModeToggle.querySelectorAll("[data-calc-mode]").forEach((b) => {
+      const active = b.dataset.calcMode === state.calcMode;
+      b.classList.toggle("is-active", active);
+      b.setAttribute("aria-selected", active);
+    });
   }
 
   function syncPeriodControls() {
@@ -1008,6 +1172,144 @@
     });
   }
 
+  /* === Official synthesis perimeter (matches Excel Synthèses sheet) === */
+
+  const OFFICIAL_FAMILY_LOOKUP = (() => {
+    const map = new Map();
+    OFFICIAL_FAMILIES.forEach((fam) => map.set(normalize(fam), fam));
+    Object.entries(FAMILY_ALIASES).forEach(([raw, official]) => {
+      map.set(normalize(raw), official);
+    });
+    return map;
+  })();
+
+  function mapFamily(rawLabel) {
+    if (rawLabel === null || rawLabel === undefined) return null;
+    const raw = String(rawLabel).trim();
+    if (!raw) return null;
+    return OFFICIAL_FAMILY_LOOKUP.get(normalize(raw)) || null;
+  }
+
+  function inOfficialScope(event) {
+    if (!event) return false;
+    const sec = String(event.sectionKey || "").trim();
+    if (!CHARGING_SECTIONS.includes(sec)) return false;
+    return mapFamily(event.family) !== null;
+  }
+
+  function decorateWithOfficial(event) {
+    const officialFamily = mapFamily(event.family);
+    const sec = String(event.sectionKey || "").trim();
+    const isOfficial = CHARGING_SECTIONS.includes(sec) && officialFamily !== null;
+    return {
+      ...event,
+      _officialFamily: officialFamily,
+      _isOfficial: isOfficial,
+      _exclusionReason: isOfficial ? null
+        : !CHARGING_SECTIONS.includes(sec)
+          ? (event.sectionKey ? "Section hors périmètre chargement" : "Section non affectée")
+          : "Famille hors taxonomie officielle"
+    };
+  }
+
+  function getOfficialEvents() {
+    return getFilteredEvents()
+      .filter(inOfficialScope)
+      .map((event) => ({
+        ...event,
+        family: mapFamily(event.family) // remap to canonical label so groupings align with Excel
+      }));
+  }
+
+  function getOfficialAnalysisEvents() {
+    return getAnalysisEvents()
+      .filter(inOfficialScope)
+      .map((event) => ({
+        ...event,
+        family: mapFamily(event.family)
+      }));
+  }
+
+  function getUnmappedEvents() {
+    return getFilteredEvents().filter((e) => !inOfficialScope(e)).map(decorateWithOfficial);
+  }
+
+  function getCalcEvents() {
+    return state.calcMode === "raw" ? getAnalysisEvents() : getOfficialAnalysisEvents();
+  }
+
+  function buildDataQuality() {
+    const all = getFilteredEvents();
+    const official = getOfficialEvents();
+    const unmapped = getUnmappedEvents();
+    const officialHours = sum(official, "durationHours");
+    const unmappedHours = sum(unmapped, "durationHours");
+    const totalHours = officialHours + unmappedHours;
+
+    const byUnmappedFamily = new Map();
+    unmapped.forEach((e) => {
+      const fam = (String(e.family || "").trim()) || "(vide)";
+      const entry = byUnmappedFamily.get(fam) || {
+        family: fam,
+        hours: 0,
+        count: 0,
+        sections: new Set(),
+        reason: e._exclusionReason
+      };
+      entry.hours += Number(e.durationHours) || 0;
+      entry.count += 1;
+      entry.sections.add(e.sectionKey || "—");
+      byUnmappedFamily.set(fam, entry);
+    });
+
+    return {
+      totalEvents: all.length,
+      officialEvents: official.length,
+      unmappedEvents: unmapped.length,
+      totalHours,
+      officialHours,
+      unmappedHours,
+      alignmentRatio: totalHours > 0 ? officialHours / totalHours : 1,
+      unmappedFamilies: Array.from(byUnmappedFamily.values())
+        .map((row) => ({
+          family: row.family,
+          hours: row.hours,
+          count: row.count,
+          sections: Array.from(row.sections).slice(0, 5).join(" · "),
+          reason: row.reason,
+          suggestion: suggestMapping(row.family)
+        }))
+        .sort((a, b) => b.hours - a.hours)
+    };
+  }
+
+  function suggestMapping(raw) {
+    const norm = normalize(raw);
+    if (!norm || raw === "(vide)") return "Renseigner la famille avant validation";
+    const direct = OFFICIAL_FAMILY_LOOKUP.get(norm);
+    if (direct) return `Reclasser « ${direct} »`;
+    for (const fam of OFFICIAL_FAMILIES) {
+      const fn = normalize(fam);
+      if (fn.startsWith(norm) || norm.startsWith(fn) || fn.includes(norm) || norm.includes(fn)) {
+        return `Suggestion : « ${fam} »`;
+      }
+    }
+    return "Hors taxonomie — ajouter au référentiel";
+  }
+
+  function buildReconciliation() {
+    const official = getOfficialEvents();
+    const byOfficial = new Map();
+    OFFICIAL_FAMILIES.forEach((fam) => byOfficial.set(fam, 0));
+    official.forEach((e) => {
+      byOfficial.set(e.family, (byOfficial.get(e.family) || 0) + (Number(e.durationHours) || 0));
+    });
+    return OFFICIAL_FAMILIES.map((family) => {
+      const hours = byOfficial.get(family) || 0;
+      return { family, hours };
+    });
+  }
+
   function render() {
     if (VIEW_ALIASES[state.view]) state.view = VIEW_ALIASES[state.view];
     const title = VIEW_TITLES[state.view] || "Centre de commandement";
@@ -1028,6 +1330,7 @@
       stocks: renderStocksView,
       ships: renderShipsView,
       references: renderReferencesHub,
+      reconciliation: renderReconciliationView,
       equipments: renderEquipments,
       stopNatures: renderStopNatures,
       users: renderUsers,
@@ -1097,12 +1400,13 @@
       bindQuickActions();
       return;
     }
-    const events = getAnalysisEvents();
+    const events = getCalcEvents();
     const metrics = computeMetrics(events);
     const pareto = topGroups(groupSum(events, "family"), 6);
     const trend = getAllDays().map(computeDaySummary).slice(-14);
     const alerts = buildDashboardAlerts(metrics, pareto, sourceEvents);
     const decorated = decorateEvents(sourceEvents);
+    const quality = buildDataQuality();
     const pendingValidation = decorated.filter((e) => e.status === "pending").length;
     const criticalStops = decorated.filter((e) => Number(e.durationHours) >= 2);
     const longStops = decorated.filter((e) => e.status === "pending" && Number(e.durationHours) >= 2);
@@ -1268,6 +1572,8 @@
         </div>
         ${renderCurrentStops(longStops.slice(0, 6))}
       </section>
+
+      ${renderDataQualityPanel(quality)}
     `;
 
     bindQuickActions();
@@ -1277,6 +1583,68 @@
       drawDailyTrend("daily-trend-chart", trend);
       drawCircuitBars("circuit-chart", circuitRows);
     });
+  }
+
+  function renderDataQualityPanel(q) {
+    const aligned = Math.round(q.alignmentRatio * 100);
+    const tone = q.alignmentRatio >= 0.95 ? "ok" : q.alignmentRatio >= 0.8 ? "warn" : "alert";
+    return `
+      <section class="panel data-quality-panel">
+        <div class="panel-head">
+          <div>
+            <h2>Qualité de donnée &amp; alignement Excel</h2>
+            <p class="status-line">Comparaison entre le périmètre TRACE-PORT et la taxonomie officielle Excel <em>Synthèses</em>. Mode actif : <strong>${state.calcMode === "official" ? "Officiel Excel" : "Brut opérationnel"}</strong>.</p>
+          </div>
+          <button class="ghost-button" type="button" data-target-view="reconciliation">Voir la réconciliation complète →</button>
+        </div>
+        <div class="quality-grid">
+          <article class="quality-card tone-${tone}">
+            <span>Taux d'alignement Excel</span>
+            <strong>${aligned} %</strong>
+            <em>${fmtHours(q.officialHours)} alignés sur ${fmtHours(q.totalHours)} cumulés</em>
+          </article>
+          <article class="quality-card">
+            <span>Arrêts officiels</span>
+            <strong>${fmtNumber(q.officialEvents, 0)}</strong>
+            <em>S/E ∈ CA30/CB30/CC30/CD30 · famille mappée</em>
+          </article>
+          <article class="quality-card ${q.unmappedEvents > 0 ? "tone-warn" : "tone-ok"}">
+            <span>Arrêts non alignés</span>
+            <strong>${fmtNumber(q.unmappedEvents, 0)}</strong>
+            <em>${fmtHours(q.unmappedHours)} hors périmètre officiel</em>
+          </article>
+          <article class="quality-card">
+            <span>Familles hors taxonomie</span>
+            <strong>${fmtNumber(q.unmappedFamilies.length, 0)}</strong>
+            <em>${q.unmappedFamilies.length > 0 ? "Action de classification recommandée" : "Aucune anomalie détectée"}</em>
+          </article>
+        </div>
+        ${q.unmappedFamilies.length > 0 ? `
+          <details class="quality-details" open>
+            <summary>Détail des familles à classifier (${q.unmappedFamilies.length})</summary>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr><th>Famille raw</th><th>Heures</th><th>Arrêts</th><th>Sections</th><th>Motif</th><th>Suggestion</th></tr>
+                </thead>
+                <tbody>
+                  ${q.unmappedFamilies.slice(0, 12).map((row) => `
+                    <tr>
+                      <td><strong>${escapeHtml(row.family)}</strong></td>
+                      <td class="num">${fmtHours(row.hours)}</td>
+                      <td class="num">${fmtNumber(row.count, 0)}</td>
+                      <td>${escapeHtml(row.sections)}</td>
+                      <td><span class="badge warn">${escapeHtml(row.reason || "—")}</span></td>
+                      <td><em>${escapeHtml(row.suggestion)}</em></td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        ` : ""}
+      </section>
+    `;
   }
 
   function buildActionQueue(decorated, metrics) {
@@ -1600,7 +1968,7 @@
   }
 
   function renderMonthlySynthesis() {
-    const events = getAnalysisEvents();
+    const events = getCalcEvents();
     const metrics = computeMetrics(events);
     const days = getAllDays();
     const dailyRows = days.map(computeDaySummary);
@@ -1909,7 +2277,7 @@
   }
 
   function renderParetoAnalysis() {
-    const events = getAnalysisEvents();
+    const events = getCalcEvents();
     if (events.length === 0) {
       els.view.innerHTML = renderPeriodEmptyState({ icon: "chart", ctaLabel: "Justifier un arrêt", ctaTarget: "entry" });
       bindQuickActions();
@@ -1947,7 +2315,7 @@
   }
 
   function renderPerformanceCircuits() {
-    const events = getAnalysisEvents();
+    const events = getCalcEvents();
     const metrics = computeMetrics(events);
     const circuits = buildCircuitPerformance(metrics);
     const chargingRows = buildSynthesisRows(events, CHARGING_SECTIONS, metrics.chargingAvailableHours);
@@ -2054,7 +2422,7 @@
     const isMonthly = period === "monthly";
     const reportType = isMonthly ? "mensuel" : "journalier";
     const rows = buildReportRows(period);
-    const events = getAnalysisEvents();
+    const events = getCalcEvents();
     const metrics = computeMetrics(events);
 
     els.view.innerHTML = `
@@ -2134,6 +2502,143 @@
         render();
       });
     });
+  }
+
+  function renderReconciliationView() {
+    const recon = buildReconciliation();
+    const quality = buildDataQuality();
+    const useExcelRef = state.selectedMonth === "2026-01" || true; // Reference is January 2026
+    const rows = recon.map((r) => {
+      const expected = EXCEL_REFERENCE_JAN_2026[r.family];
+      const diff = expected === undefined ? null : r.hours - expected;
+      const absDiff = Math.abs(diff || 0);
+      let status, statusTone;
+      if (expected === undefined) {
+        status = "Pas de référence Excel"; statusTone = "muted";
+      } else if (absDiff < 0.1) {
+        status = "OK"; statusTone = "ok";
+      } else if (absDiff < 1.0) {
+        status = "Écart mineur"; statusTone = "warn";
+      } else {
+        status = "Écart majeur"; statusTone = "alert";
+      }
+      return { ...r, expected, diff, status, statusTone };
+    });
+    const totalTP = sum(rows, "hours");
+    const totalExcel = Object.values(EXCEL_REFERENCE_JAN_2026).reduce((a, b) => a + b, 0);
+    const totalDiff = totalTP - totalExcel;
+    const totalDiffTone = Math.abs(totalDiff) < 1 ? "ok" : Math.abs(totalDiff) < 10 ? "warn" : "alert";
+
+    els.view.innerHTML = `
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Réconciliation Excel ↔ TRACE-PORT</h2>
+            <p class="status-line">Audit de l'alignement entre la synthèse officielle <em>(Synthèses!row15)</em> et le calcul live TRACE-PORT, famille par famille. Référence : Janvier 2026.</p>
+          </div>
+          <button class="ghost-button" type="button" data-target-view="dashboard">← Retour au tableau de bord</button>
+        </div>
+
+        <div class="metric-grid">
+          ${metric("Total Excel (officiel)", fmtHours(totalExcel), "Σ Synthèses!row15")}
+          ${metric("Total TRACE-PORT (officiel)", fmtHours(totalTP), state.calcMode === "raw" ? "Mode brut sélectionné — basculer en officiel pour comparer" : "Mode officiel")}
+          ${metric("Écart absolu", `${totalDiff >= 0 ? "+" : ""}${fmtHours(totalDiff)}`, `Tolérance : <0.1h = OK · <1h = mineur · ≥1h = majeur`)}
+          ${metric("Alignement global", fmtPct(quality.alignmentRatio), `${fmtNumber(quality.officialEvents, 0)} arrêts officiels / ${fmtNumber(quality.totalEvents, 0)} total`)}
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Détail par famille</h2>
+          <div class="reconciliation-legend">
+            <span><span class="dot ok"></span> OK</span>
+            <span><span class="dot warn"></span> Écart mineur</span>
+            <span><span class="dot alert"></span> Écart majeur</span>
+            <span><span class="dot muted"></span> Sans réf.</span>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Famille officielle</th>
+                <th>Excel (h)</th>
+                <th>TRACE-PORT (h)</th>
+                <th>Écart</th>
+                <th>Statut</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map((r) => `
+                <tr class="recon-row tone-${r.statusTone}">
+                  <td><strong>${escapeHtml(r.family)}</strong></td>
+                  <td class="num">${r.expected !== undefined ? fmtHours(r.expected) : "—"}</td>
+                  <td class="num">${fmtHours(r.hours)}</td>
+                  <td class="num">${r.diff === null ? "—" : (r.diff >= 0 ? "+" : "") + fmtHours(r.diff)}</td>
+                  <td><span class="status-pill ${r.statusTone === "ok" ? "green" : r.statusTone === "warn" ? "amber" : r.statusTone === "alert" ? "red" : ""}">${escapeHtml(r.status)}</span></td>
+                </tr>
+              `).join("")}
+              <tr class="row-total">
+                <td><strong>Total chargement</strong></td>
+                <td class="num"><strong>${fmtHours(totalExcel)}</strong></td>
+                <td class="num"><strong>${fmtHours(totalTP)}</strong></td>
+                <td class="num"><strong>${totalDiff >= 0 ? "+" : ""}${fmtHours(totalDiff)}</strong></td>
+                <td><span class="status-pill ${totalDiffTone === "ok" ? "green" : totalDiffTone === "warn" ? "amber" : "red"}">${totalDiffTone === "ok" ? "Aligné" : totalDiffTone === "warn" ? "Écart mineur" : "Écart majeur"}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      ${quality.unmappedFamilies.length > 0 ? `
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Catégories hors taxonomie officielle (mode brut)</h2>
+            <span class="badge red">${quality.unmappedFamilies.length} familles</span>
+          </div>
+          <p class="status-line">Ces entrées <strong>ne sont pas incluses</strong> dans la synthèse officielle. Elles ne contribueront aux KPI que si elles sont reclassées vers une famille officielle.</p>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr><th>Famille raw</th><th>Heures</th><th>Arrêts</th><th>Sections</th><th>Motif d'exclusion</th><th>Suggestion</th></tr>
+              </thead>
+              <tbody>
+                ${quality.unmappedFamilies.map((row) => `
+                  <tr>
+                    <td><strong>${escapeHtml(row.family)}</strong></td>
+                    <td class="num">${fmtHours(row.hours)}</td>
+                    <td class="num">${fmtNumber(row.count, 0)}</td>
+                    <td>${escapeHtml(row.sections)}</td>
+                    <td><span class="badge warn">${escapeHtml(row.reason || "—")}</span></td>
+                    <td><em>${escapeHtml(row.suggestion)}</em></td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ` : ""}
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Documentation des formules</h2>
+          <span class="badge cyan">Source de vérité</span>
+        </div>
+        <div class="formula-doc">
+          ${Object.entries(KPI_DEFINITIONS).map(([key, def]) => `
+            <article class="formula-doc-card">
+              <header>
+                <strong>${escapeHtml(def.label)}</strong>
+                <span class="badge">${escapeHtml(def.sheet)}</span>
+              </header>
+              <code>${escapeHtml(def.formula)}</code>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+    `;
+
+    bindQuickActions();
   }
 
   function renderReferencesHub() {
@@ -3256,9 +3761,10 @@
   }
 
   function renderMonthlySynthese() {
-    const events = getAnalysisEvents();
+    // Synthèse mensuelle reproduces the Excel "Synthèses" sheet — always use official perimeter
+    const events = getOfficialAnalysisEvents();
     const metrics = computeMetrics(events);
-    const families = unique([...DATA.families.map((f) => f.name), ...events.map((e) => e.family).filter(Boolean)]);
+    const families = OFFICIAL_FAMILIES;
     const chargingMatrix = CHARGING_SECTIONS.map((sectionKey) => {
       const row = { sectionKey, total: 0, percent: 0, families: {} };
       families.forEach((fam) => {
@@ -4292,7 +4798,7 @@
   }
 
   function computeMetrics(events) {
-    const totalStopHours = sum(events, "durationHours");
+    const rawTotalStopHours = sum(events, "durationHours");
     const qualityTotals = {};
     DATA.tonnage.forEach((row) => {
       Object.entries(row.pesage || {}).forEach(([quality, value]) => {
@@ -4310,14 +4816,31 @@
     const dayCount = DATA.tonnage.length || 31;
     const chargingAvailableHours = dayCount * CHARGING_SECTIONS.length * 24;
     const chargingEvents = events.filter((event) => CHARGING_SECTIONS.includes(event.sectionKey));
-    const exploitationHours = sumByFamily(chargingEvents, ["exploitation"]);
-    const maintenanceHours = sumByFamily(chargingEvents, MAINTENANCE_FAMILIES);
-    const chargingStopHours = sum(chargingEvents, "durationHours");
-    const runningHours = Math.max(chargingAvailableHours - chargingStopHours, 0);
+    // Excel-aligned scope: charging events with mapped official family
+    const officialChargingEvents = chargingEvents.filter((e) => mapFamily(e.family) !== null);
+
+    // Sum maintenance/exploitation against the normalized family taxonomy
+    const officialFamilyOf = (event) => mapFamily(event.family);
+    const exploitationHours = officialChargingEvents
+      .filter((e) => normalize(officialFamilyOf(e)) === "exploitation")
+      .reduce((a, e) => a + (Number(e.durationHours) || 0), 0);
+    const maintenanceHours = officialChargingEvents
+      .filter((e) => MAINTENANCE_FAMILIES.map(normalize).includes(normalize(officialFamilyOf(e))))
+      .reduce((a, e) => a + (Number(e.durationHours) || 0), 0);
+
+    const officialStopHours = sum(officialChargingEvents, "durationHours");
+    const chargingStopHours = sum(chargingEvents, "durationHours"); // including unmapped
+    // Use official perimeter for KPI calculations matching Excel
+    const runningHours = Math.max(chargingAvailableHours - officialStopHours, 0);
     const cadenceTph = runningHours ? pesageTotal / runningHours : 0;
+
+    // Expose totalStopHours according to current calc mode for the hero
+    const totalStopHours = state.calcMode === "raw" ? rawTotalStopHours : officialStopHours;
 
     return {
       totalStopHours,
+      rawTotalStopHours,
+      officialStopHours,
       qualityTotals,
       pesageTotal,
       draftTotal,
@@ -4329,12 +4852,15 @@
       runningHours,
       exploitationHours,
       maintenanceHours,
-      externalHours: sumByFamily(chargingEvents, EXTERNAL_FAMILIES),
+      externalHours: officialChargingEvents
+        .filter((e) => EXTERNAL_FAMILIES.map(normalize).includes(normalize(officialFamilyOf(e))))
+        .reduce((a, e) => a + (Number(e.durationHours) || 0), 0),
       trsExploitation: ratio(chargingAvailableHours - exploitationHours, chargingAvailableHours),
       trsMaintenance: ratio(chargingAvailableHours - maintenanceHours, chargingAvailableHours),
       trsGlobal: ratio(chargingAvailableHours - exploitationHours - maintenanceHours, chargingAvailableHours),
       trgGlobal: ratio(runningHours, chargingAvailableHours),
-      cadenceTph
+      cadenceTph,
+      mode: state.calcMode
     };
   }
 

@@ -3209,6 +3209,170 @@ tbody tr:hover {
   padding: 6px 10px;
 }
 
+.calc-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calc-mode-label {
+  font-size: 10.5px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.calc-mode-toggle { padding: 3px; }
+.calc-mode-toggle .segment { font-size: 11.5px; padding: 6px 12px; }
+
+.data-quality-panel {
+  border-top: 2px solid var(--signal-2);
+}
+
+.quality-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.quality-card {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 4px;
+}
+
+.quality-card.tone-ok { border-left: 4px solid var(--green); background: rgba(26, 168, 114, 0.04); }
+.quality-card.tone-warn { border-left: 4px solid var(--amber); background: rgba(245, 158, 11, 0.04); }
+.quality-card.tone-alert { border-left: 4px solid var(--red); background: rgba(220, 38, 38, 0.04); }
+
+.quality-card span {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.quality-card strong {
+  font-size: 22px;
+  color: var(--ink);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  margin: 4px 0;
+}
+
+.quality-card.tone-ok strong { color: var(--green); }
+.quality-card.tone-warn strong { color: var(--amber); }
+.quality-card.tone-alert strong { color: var(--red); }
+
+.quality-card em {
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.quality-details {
+  margin-top: 12px;
+  border-top: 1px dashed var(--line);
+  padding-top: 12px;
+}
+
+.quality-details summary {
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--rail-3);
+  padding: 6px 0;
+  list-style: none;
+}
+
+.quality-details summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 6px;
+  transition: transform 140ms;
+}
+
+.quality-details[open] summary::before { transform: rotate(90deg); }
+
+.reconciliation-legend {
+  display: inline-flex;
+  gap: 14px;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.reconciliation-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reconciliation-legend .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.reconciliation-legend .dot.ok { background: var(--green); }
+.reconciliation-legend .dot.warn { background: var(--amber); }
+.reconciliation-legend .dot.alert { background: var(--red); }
+.reconciliation-legend .dot.muted { background: var(--muted-2); }
+
+.recon-row.tone-ok td:first-child { border-left: 3px solid var(--green); }
+.recon-row.tone-warn td:first-child { border-left: 3px solid var(--amber); }
+.recon-row.tone-alert td:first-child { border-left: 3px solid var(--red); }
+.recon-row.tone-muted td:first-child { border-left: 3px solid var(--muted-2); }
+
+.formula-doc {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 10px;
+}
+
+.formula-doc-card {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.formula-doc-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.formula-doc-card strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.formula-doc-card code {
+  display: block;
+  font-family: "SFMono-Regular", "Menlo", monospace;
+  font-size: 11.5px;
+  color: var(--rail-3);
+  background: var(--surface);
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .live-indicator {
   display: inline-flex;
   align-items: center;

@@ -84,6 +84,7 @@
           <details class="nav-group">
             <summary>Administration</summary>
             <button class="nav-item" data-view="references" type="button" data-icon="hub">Référentiels</button>
+            <button class="nav-item" data-view="reconciliation" type="button" data-icon="audit">Réconciliation Excel</button>
             <button class="nav-item" data-view="users" type="button" data-icon="users">Utilisateurs &amp; rôles</button>
             <button class="nav-item" data-view="logs" type="button" data-icon="audit">Logs &amp; traçabilité</button>
             <button class="nav-item" data-view="settings" type="button" data-icon="settings">Paramètres</button>
@@ -159,6 +160,13 @@
             <span class="period-summary" id="period-summary">—</span>
           </div>
           <div class="period-bar-right">
+            <div class="calc-mode" role="group" aria-label="Mode de calcul">
+              <span class="calc-mode-label">Mode</span>
+              <div class="segmented-control calc-mode-toggle" id="calc-mode-toggle">
+                <button class="segment" type="button" data-calc-mode="official" title="Périmètre Excel: CA30/CB30/CC30/CD30 + taxonomie officielle">Officiel Excel</button>
+                <button class="segment" type="button" data-calc-mode="raw" title="Tous les arrêts enregistrés (mode brut)">Brut opérationnel</button>
+              </div>
+            </div>
             <span class="live-indicator" id="live-indicator" title="Mise à jour automatique toutes les 30 s">
               <span class="live-dot"></span>
               <span>Live</span>
