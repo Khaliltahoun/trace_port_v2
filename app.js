@@ -245,6 +245,7 @@
     authenticated: loadAuthFlag(),
     period: "month",
     selectedMonth: localStorage.getItem("trace-port-selected-month") || datasetMonthKey(),
+    analysisDate: localStorage.getItem("trace-port-analysis-date") || defaultAnalysisDate(),
     customFrom: "",
     customTo: "",
     filters: {
@@ -283,21 +284,38 @@
   function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
   function endOfDay(d) { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; }
 
+  function defaultAnalysisDate() {
+    const monthKey = localStorage.getItem("trace-port-selected-month") || datasetMonthKey();
+    return monthEndDate(monthKey);
+  }
+
+  function monthEndDate(monthKey) {
+    const [year, month] = monthKey.split("-").map(Number);
+    const end = new Date(year || 2026, month || 1, 0);
+    return dateKey(end);
+  }
+
+  function analysisAnchorDate() {
+    const value = state.analysisDate || defaultAnalysisDate();
+    const parsed = new Date(`${value}T12:00:00`);
+    return Number.isFinite(parsed.getTime()) ? parsed : new Date();
+  }
+
   function periodRange() {
-    const now = new Date();
+    const anchor = analysisAnchorDate();
     const range = { from: null, to: null, label: "" };
     if (state.period === "today") {
-      const today = startOfDay(now);
-      range.from = today; range.to = endOfDay(now);
+      const today = startOfDay(anchor);
+      range.from = today; range.to = endOfDay(anchor);
       range.label = `Aujourd'hui · ${today.toLocaleDateString("fr-FR")}`;
     } else if (state.period === "7d") {
-      const end = endOfDay(now);
-      const start = startOfDay(new Date(now.getTime() - 6 * 86400000));
+      const end = endOfDay(anchor);
+      const start = startOfDay(new Date(anchor.getTime() - 6 * 86400000));
       range.from = start; range.to = end;
       range.label = "7 derniers jours";
     } else if (state.period === "mtd") {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-      range.from = start; range.to = endOfDay(now);
+      const start = new Date(anchor.getFullYear(), anchor.getMonth(), 1, 0, 0, 0);
+      range.from = start; range.to = endOfDay(anchor);
       range.label = `Mois en cours · ${MONTH_NAMES[start.getMonth()]} ${start.getFullYear()}`;
     } else if (state.period === "custom" && state.customFrom && state.customTo) {
       range.from = startOfDay(new Date(`${state.customFrom}T00:00:00`));
@@ -510,8 +528,7 @@
         const period = btn.dataset.period;
         state.period = period;
         if (period === "custom" && (!state.customFrom || !state.customTo)) {
-          // Pre-fill with last 30 days from real today by default
-          const today = new Date();
+          const today = analysisAnchorDate();
           const ago = new Date(today.getTime() - 30 * 86400000);
           state.customFrom = ago.toISOString().slice(0, 10);
           state.customTo = today.toISOString().slice(0, 10);
@@ -526,11 +543,29 @@
     els.monthPicker?.addEventListener("change", () => {
       state.selectedMonth = els.monthPicker.value;
       try { localStorage.setItem("trace-port-selected-month", state.selectedMonth); } catch {}
+      state.analysisDate = monthEndDate(state.selectedMonth);
+      try { localStorage.setItem("trace-port-analysis-date", state.analysisDate); } catch {}
       if (state.period !== "month") {
         state.period = "month";
         syncPeriodControls();
       }
       resetPagination();
+      paintPeriodSummary();
+      render();
+    });
+
+    els.globalDate?.addEventListener("change", () => {
+      if (!els.globalDate.value) return;
+      state.analysisDate = els.globalDate.value;
+      const dateMonth = state.analysisDate.slice(0, 7);
+      if (dateMonth) {
+        state.selectedMonth = dateMonth;
+        try { localStorage.setItem("trace-port-selected-month", state.selectedMonth); } catch {}
+      }
+      try { localStorage.setItem("trace-port-analysis-date", state.analysisDate); } catch {}
+      resetPagination();
+      populateMonthPicker();
+      syncPeriodControls();
       paintPeriodSummary();
       render();
     });
@@ -584,6 +619,9 @@
     if (els.monthPicker) {
       els.monthPicker.hidden = state.period !== "month";
       els.monthPicker.value = state.selectedMonth;
+    }
+    if (els.globalDate) {
+      els.globalDate.value = state.analysisDate || defaultAnalysisDate();
     }
     if (els.rangePicker) {
       els.rangePicker.hidden = state.period !== "custom";
